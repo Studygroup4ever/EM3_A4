@@ -32,6 +32,15 @@ These are the questions you need to be able to answer at the end of the assignme
 
 N.B. N.B. The data are collected by students from previous years (Study 1 - 4). Note that synchronous and turn-taking are the same across all four studies, but the third condition is different: in the first year it was self-paced joint reading; in the second to fourth years it was the tv-series conversation.
 
+# notes
+three different tasks, not doign the same task in the same order
+we are looking into coordination, HR corrdination. We want to see whether the task itself has a role. If 2 people are in a room, maybe towards the end they are more likely to coordinate no matter the task.
+
+Begin with: play with one file. Downsample to remove outliers. 
+First one file, then write a function for the entire set.
+Start with one file, not one pair. 
+
+
 ## Let's get started
 
 ### Exploring physiological signals
@@ -102,6 +111,17 @@ threshold=2.5 # Default value at 2.5 sds from the mean. But you can increase it,
 
 ## Tip the info is in the file name
 
+removeOuts <- function(ts, threshold){
+  higher_threshold_condition <- ts > (mean(ts, na.rm = T) + (threshold*sd(ts, na.rm = T)))
+  lower_threshold_condition <- ts < (mean(ts, na.rm = T) - (threshold*sd(ts, na.rm = T)))
+  ts[higher_threshold_condition] <- mean(ts, na.rm= T) + (threshold*sd(ts, na.rm = T))  #anything above the higher threshold, we want to replace it
+  ts[lower_threshold_condition] <- mean(ts, na.rm= T) - (threshold*sd(ts, na.rm = T))
+  return(ts)
+}
+
+threshold = 2.5
+
+remove outs (HR1, threshold) ....
 
 ```
 
