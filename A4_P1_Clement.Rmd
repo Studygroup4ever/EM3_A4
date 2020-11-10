@@ -54,7 +54,7 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 
 ```{r}
 # Load the libraries
-pacman::p_load(tidyverse, groupdata2, strex, zoo)
+pacman::p_load(tidyverse, groupdata2, strex, zoo, lme4)
 
 # Load the file
 d1 <- read_csv("C:/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/data/Study1_G1_T1_Synchronous.csv")
@@ -197,24 +197,24 @@ data_preprocess <- function(filename, threshold = 2.5){
  
   #Downsampling
  df <- df %>%
-  group(n = 100, method = 'greedy') %>%
+  group(n = 1000, method = 'greedy') %>%
   dplyr::summarise(time = mean(time,na.rm=T),
                    HR1 = mean(HR1,na.rm=T),
                    HR2 = mean(HR2,na.rm=T),
                    Resp1 = mean(Resp1,na.rm=T),
                    Resp2 = mean(Resp2,na.rm=T))
  
- #Remove NAs
- df$t <- na.locf(df, na.rm = TRUE)
+ #Remove NAs. This function replaces NAs with the previous non-NA value. However it might not work in this function.
+ #df$t <- na.locf(df, na.rm = TRUE)
  
  #Remove outliers
  #The old fashioned way
  
  
-' df$HR1_c <- removeOuts(df$HR1, threshold)
+ df$HR1_c <- removeOuts(df$HR1, threshold)
  df$HR2_c <- removeOuts(df$HR2, threshold)
  df$Resp1_c <- removeOuts(df$Resp1, threshold)
- df$Resp2_c <- removeOuts(df$Resp2, threshold)'
+ df$Resp2_c <- removeOuts(df$Resp2, threshold)
  
  #Scaling
  df$HR1_c_scaled <- z_scale(df$HR1_c)
@@ -265,7 +265,7 @@ ECG_data %>%
 # Remove bad data
 
 # Save the data
-write_csv(pitch_data, "/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/Portfolio 2/A3-P2/pitch_data.csv")
+#write_csv(ECG_data, "/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/EM3_A4/ECG.data.csv")
 ```
 
 *#HERE I WANT TO TRY AND MAKE SOME SUBSETS AND COMPARE THEM###*
@@ -274,6 +274,21 @@ write_csv(pitch_data, "/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfo
 
 ECG_data1 <- ECG_data
 
+#How many group do we have before removing NAs?
+ECG_data1 %>%
+  group_by(Group) %>% 
+  count(Condition, sort = T) %>% 
+  View()#We have 97 groups
+
+#TRYING TO REMOVE ALL NAs
+ECG_data1 <- na.omit(ECG_data1)
+
+#How many groups were completely removed?
+
+ECG_data1 %>%
+  group_by(Group) %>% 
+  count(Condition, sort = T) #We now only have 56 groups. 41 groups were removed completely 
+
 ECG_data1$time <- ifelse(ECG_data1$time > 35, #35 is the biggest "normal" number. The rest are multiplied.
        ECG_data1$time/10000,
        ECG_data1$time)
@@ -281,27 +296,25 @@ ECG_data1$time <- ifelse(ECG_data1$time > 35, #35 is the biggest "normal" number
 #How many datapoints are NAs in the time column?
 sum(is.na(ECG_data1$time))
 
+
+
 #So we just decide to replace these NAs with the previous non-NA value
 
 ECG_data1$time <- na.locf(ECG_data1$time, na.rm = TRUE) #This function takes the last non-NA value and replaces the NA value
+?na.locf
 
-stuff <- ECG_data1 %>%
-  group_by(Group) %>% 
-  count(Condition, sort = T)
 
 ECG_data1 %>% 
-  filter(Group == 101) %>%
-  group_by(Trial) %>% 
-  ggplot(aes(time, HR1_c_scaled))+
-  geom_point()+
-  geom_smooth()
+  group_by()
+ECG_data1$time2 <- 1:length(time)
 
 ECG_data1 %>%
-  filter(Group == ) %>% 
+  filter(Group == 302) %>%
   ggplot() + 
-  geom_path(aes(time, HR1_c_scaled, color = "P1")) + 
-  geom_path(aes(time, HR2_c_scaled, color = "P2")) + 
-  labs(x = "time", y = "HR") + theme_classic()
+  geom_path(aes(time, Resp1_c_scaled, color = "P1")) + 
+  geom_path(aes(time, Resp2_c_scaled, color = "P2")) +
+  facet_wrap( ~ Condition, scales = 'free')
+
 
 ```
 
@@ -331,16 +344,31 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 ```{r}
 
 # Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
-# Generate a column for each: change in HR1, HR2, Resp1, Resp2
+ECG_data1 <- ECG_data1 %>% 
+  mutate(prev_HR1 = lag(HR1_c_scaled),
+         prev_HR2 = lag(HR2_c_scaled),
+         prev_Resp1 = lag(Resp1_c_scaled),
+         prev_Resp2 = lag(Resp2_c_scaled))
 
+# Generate a column for each: change in HR1, HR2, Resp1, Resp2
+ECG_data1 <- ECG_data1 %>% 
+  mutate(change_HR1 = HR1_c_scaled-prev_HR1,
+         change_HR2 = HR2_c_scaled-prev_HR2,
+         change_Resp1 = Resp1_c_scaled-prev_Resp1,
+         change_Resp2 = Resp2_c_scaled-prev_Resp2)
 
 # Make the data long, so we can analyze both participants at the same time. Tip: you can use the function gather () 
 ## N.B. This is a bit tricky and you might have to do it in several steps
 
+ECG_data2 <- ECG_data1
+#22 change
+ECG_data2 <- gather(ECG_data2, "change_HR", 23:24)
+
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
 
 # Model change as a function of own and other previous state 
-
+model <- lmerTest::lmer(change_HR1~ prev_HR1 + prev_HR2 + Condition + (1|Group), ECG_data2)
+summary(model)
 
 # Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
 
