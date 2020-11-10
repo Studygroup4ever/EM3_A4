@@ -89,6 +89,10 @@ threshold=2.5 # Default value at 2.5 sds from the mean. But you can increase it,
 ## Tip the info is in the file name
 ```
 
+```{r}
+#pitch_data = list.files(path = "Pitch/", pattern = ".txt")
+```
+
 
 ## Now we are ready to go to load and pre-process all files
 
