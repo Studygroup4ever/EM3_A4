@@ -296,7 +296,7 @@ hov_data <- data %>%
 # Reading Clements data
 ```{r}
 
-ECG <- read.csv("ECG.data.csv") 
+ECG <- read.csv("ECG.data.csv")
 
 ```
 
@@ -369,7 +369,18 @@ We can then run an analysis where change is a function of one's previous state (
 - N.B. the model will be slow. Make sure it works on a subset of the data first!
 
 ```{r}
+# Make long
+longHR <- tidyr::pivot_longer(ECG,c(HR1_c_scaled,HR2_c_scaled), values_to = "HRself")
+longHR$other <- tidyr::pivot_longer(ECG,c(HR2_c_scaled,HR1_c_scaled), values_to = "HRother")[['HRother']] #two square brackets
 
+longRESP <- tidyr::pivot_longer(ECG,c(Resp1_c_scaled,Resp2_c_scaled), values_to = "RESPself")
+longRESP$other <- tidyr::pivot_longer(ECG,c(Resp2_c_scaled,Resp1_c_scaled), values_to = "RESPother" )[['RESPother']] #only concerning 'value'
+
+# Make lag
+longHR <- longHR %>% 
+  mutate(
+    HRlag = lag(HRself)
+  )
 
 ```
 

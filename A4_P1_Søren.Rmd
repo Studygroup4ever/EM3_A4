@@ -54,43 +54,71 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 
 ```{r}
 # Load the libraries
+library(pacman)
+
+p_load(ggplot2, tidyverse, dplyr, groupdata2, strex, zoo, readr)
+```
+
+```{r}
 # Load the file
+d1 <- read_csv("data/Study1_G1_T1_Synchronous.csv")
+
+d2 <- read_csv("data/Study3_G8_T3_Conversation.csv")
+
+d2 <- d2 %>%
+  group(n = 100, method = 'greedy') %>%
+  dplyr::summarise(time = mean(time,na.rm=T),
+                   HR1 = mean(HR1,na.rm=T),
+                   HR2 = mean(HR2,na.rm=T),
+                   Resp1 = mean(Resp1,na.rm=T),
+                   Resp2 = mean(Resp2,na.rm=T))
+
+
+
+
+
+
+#Downsampling
+d1 = d1 %>%
+  group(n = 100, method = 'greedy') %>%
+  dplyr::summarise(time = mean(time,na.rm=T),
+                   HR1 = mean(HR1,na.rm=T),
+                   HR2 = mean(HR2,na.rm=T),
+                   Resp1 = mean(Resp1,na.rm=T),
+                   Resp2 = mean(Resp2,na.rm=T))
+
+
+```
+
+
+
+```{r}
 # Plot
 ## Remove outliers
 ### Tip, check the function below. This is the function explained in the video lecture
-removeOuts <- function(ts,threshold){
-  ts[ts > (mean(ts,na.rm=T) +
-             (threshold*sd(ts,na.rm=T))) | 
-       ts < (mean(ts,na.rm=T) -
-             (threshold*sd(ts,na.rm=T)))] = mean(ts,na.rm=T)
-  return(ts)
-}
-threshold=2.5 # Default value at 2.5 sds from the mean. But you can increase it, if you want.
+# Default value at 2.5 sds from the mean. But you can increase it, if you want.
 # Plot raw data against those with the artifacts removed
 ## Scale
 ### Tip: if scale() gives some issues, try the one below
-#z_scale <- function(column){
-#  column_c <- (column - mean(column)) / sd(column)
-#}
 # Plot again to check how scaled data look like
 ## Downsample
 ### You can use the code below. It is almost the same as the one in the video lecture.
-#d1 = d %>%
-#  group(n = 100, method = 'greedy') %>%
-#  dplyr::summarise(
-#    time = mean(time,na.rm=T),
-#    HR1 = mean(HR1S,na.rm=T),
-#    HR2 = mean(HR2S,na.rm=T),
-#    Resp1 = mean(Resp1S,na.rm=T),
-#    Resp2 = mean(Resp2S,na.rm=T),
-#    rowname = rowname[1]) #the index we use to put them back together 
+d1 = d %>%
+ group(n = 100, method = 'greedy') %>%
+ dplyr::summarise(
+   time = mean(time,na.rm=T),
+   HR1 = mean(HR1S,na.rm=T),
+   HR2 = mean(HR2S,na.rm=T),
+   Resp1 = mean(Resp1S,na.rm=T),
+   Resp2 = mean(Resp2S,na.rm=T),
+   rowname = rowname[1]) #the index we use to put them back together
 ## Plot the downsampled data. You can use the code from the slides
 ## Now add the group, trial, condition to the cleaned up, scaled, downsampled data
 ## Tip the info is in the file name
 ```
 
 ```{r}
-#pitch_data = list.files(path = "Pitch/", pattern = ".txt")
+data_list = list.files(path = "data/", pattern = ".csv")
 ```
 
 
@@ -107,21 +135,150 @@ A couple of tips:
 
 ```{r}
 # Define a function running the loading, artifact removal, scaling, downsampling, info adding.
+# filename <- "Study1_G1_T1_Synchronous.csv"
+# 
+# file<- paste0("data/", filename)
+# read_delim(file, ',')
+
+removeOuts <- function(ts,threshold){
+  ts[ts > (mean(ts,na.rm=T) +
+             (threshold*sd(ts,na.rm=T))) | 
+       ts < (mean(ts,na.rm=T) -
+             (threshold*sd(ts,na.rm=T)))] = mean(ts,na.rm=T)
+  return(ts)
+}
+
+
+z_scale <- function(column){
+ column_c <- (column - mean(column, na.rm=T)) / sd(column, na.rm=T)
+}
+
+
 data_preprocess <- function(filename, threshold = 2.5){
   
-  # To be filled in
-  
-  return(d1)
-}
-#  Identify all files to be read
-# Run the function on the whole dataset using map_df
-         
-# Now we need to make sure all the data are meaningful or something has to be removed
-# E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
-# plots plots plots
-# Remove bad data
-# Save the data
+  df <- read_delim(paste0("data/", filename), delim = ",")
+   
+# parse filename; study, group, trial, type
+  numbers <- as.data.frame(str_extract_numbers(filename))
+  Study <- numbers[1, ]
+  Group <- 100 * Study + numbers[2,]
+  Trial <- numbers[3, ]
+  Condition <- str_extract(filename, "[a-zA-Z]{9,14}")
+  vars <- as.data.frame(t(cbind(c(Study, Group, Trial, Condition))))
+  names(vars) <- c("Study", "Group", "Trial", "Condition")
+ 
+# Downsampling
+  df <- df %>%
+  group(n = 100, method = 'greedy') %>%
+    dplyr::summarise(time = ifelse(Study == 4, mean(min,na.rm=T), mean(time,na.rm=T)),
+                     HR1 = mean(HR1,na.rm=T),
+                     HR2 = mean(HR2,na.rm=T),
+                     Resp1 = mean(Resp1,na.rm=T),
+                     Resp2 = mean(Resp2,na.rm=T))
+ 
+ # Remove outliers
+  df <- df %>%
+    mutate(
+      HR1_c = removeOuts(HR1, threshold),
+      HR2_c = removeOuts(HR2, threshold),
+      Resp1_c = removeOuts(Resp1, threshold),
+      Resp2_c = removeOuts(Resp2, threshold),
+      HR1_c_scaled = z_scale(HR1_c),
+      HR2_c_scaled = z_scale(HR2_c),
+      Resp1_c_scaled = z_scale(Resp1_c),
+      Resp2_c_scaled = z_scale(Resp2_c)
+  )
+
+ df <- cbind(vars, df)
+ return(df)
+}  
+
 ```
+
+
+```{r}
+threshold=2.5 
+
+#  Identify all files to be read
+ECG_data <- list.files(path = "data/", pattern = ".csv")
+ 
+# Run the function on the whole dataset using map_df
+df <- ECG_data %>% 
+  purrr::map_df(data_preprocess)
+
+df <- ECG_df
+
+df <- df %>% 
+  mutate(
+    Study = as.factor(Study),
+    Group = as.factor(Group),
+    Condition = as.factor(Condition),
+    Trial = as.factor(Trial),
+    time = ifelse(df$time > 30000, df$time/10000, df$time)
+    )
+
+# Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
+df <- df %>% 
+  mutate(prev_HR1 = lag(HR1_c_scaled),
+         prev_HR2 = lag(HR2_c_scaled),
+         prev_Resp1 = lag(Resp1_c_scaled),
+         prev_Resp2 = lag(Resp2_c_scaled))
+
+# Generate a column for each: change in HR1, HR2, Resp1, Resp2
+df <- df %>% 
+  mutate(change_HR1 = HR1_c_scaled-prev_HR1,
+         change_HR2 = HR2_c_scaled-prev_HR2,
+         change_Resp1 = Resp1_c_scaled-prev_Resp1,
+         change_Resp2 = Resp2_c_scaled-prev_Resp2)
+         
+# Now we need to make sure all the data are meaningful or if something has to be removed
+# E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
+
+# plots plots plots
+
+df %>% 
+  group_by(Group) %>% 
+  ggplot(aes(time, HR1)) +
+  geom_smooth()
+# Remove bad data
+
+# Save the data
+#write_csv(pitch_data, "/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/Portfolio 2/A3-P2/pitch_data.csv")
+```
+
+```{r}
+#df <- read_csv('ECG.data.csv')
+```
+
+```{r}
+long <-
+  tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
+
+long$HR_other <-
+  tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']]
+
+long$HR_self_lag <-
+  tidyr::pivot_longer(df, c(prev_HR1, prev_HR2))[['value']]
+
+long$HR_other_lag <-
+  tidyr::pivot_longer(df, c(prev_HR2, prev_HR1))[['value']]
+
+long$Resp_self <-
+  tidyr::pivot_longer(df, c(Resp1_c_scaled, Resp2_c_scaled))[['value']]
+
+long$Resp_other <-
+  tidyr::pivot_longer(df, c(Resp2_c_scaled, Resp1_c_scaled))[['value']]
+
+long$Resp_self_lag <-
+  tidyr::pivot_longer(df, c(prev_Resp1, prev_Resp2))[['value']]
+
+long$Resp_other_lag <-
+  tidyr::pivot_longer(df, c(prev_Resp2, prev_Resp1))[['value']]
+
+
+```
+
+
 
 ## Now we need to run some analysis
 
@@ -150,6 +307,7 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 # Generate a column for each: change in HR1, HR2, Resp1, Resp2
 # Make the data long, so we can analyze both participants at the same time. Tip: you can use the function gather () 
 ## N.B. This is a bit tricky and you might have to do it in several steps
+
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
 # Model change as a function of own and other previous state 
 # Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
