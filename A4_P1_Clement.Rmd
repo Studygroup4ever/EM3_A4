@@ -172,6 +172,8 @@ A couple of tips:
 
 name <- "Study1_G1_T2_Synchronous.csv"
 
+Study4 <- "Study4_G1_T4_Conversation"
+
 numbers <- as.data.frame(str_extract_numbers(name))
 Study <- numbers[1,]
 Group <- 100*Study+numbers[2,]
@@ -184,8 +186,6 @@ names(vars) <- c("Study", "Group", "Trial", "Condition")
 
 data_preprocess <- function(filename, threshold = 2.5){
   
-  df <- read_delim(paste0("/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/data/", filename), delim = ",")
-   
   #parse filename; study, group, trial, type
   numbers <- as.data.frame(str_extract_numbers(filename))
   Study <- numbers[1,]
@@ -194,11 +194,15 @@ data_preprocess <- function(filename, threshold = 2.5){
   Condition <- str_extract(filename, "[a-zA-Z]{9,14}") 
   vars <- as.data.frame(t(cbind(c(Study, Group, Trial, Condition))))
   names(vars) <- c("Study", "Group", "Trial", "Condition")
+  
+  df <- read_delim(paste0("/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/data/", filename), delim = ",")
+   
+  
  
   #Downsampling
  df <- df %>%
   group(n = 1000, method = 'greedy') %>%
-  dplyr::summarise(time = mean(time,na.rm=T),
+  dplyr::summarise(time = ifelse(Study == 4, mean(min, na.rm = TRUE), mean(time,na.rm=T)),
                    HR1 = mean(HR1,na.rm=T),
                    HR2 = mean(HR2,na.rm=T),
                    Resp1 = mean(Resp1,na.rm=T),
@@ -258,14 +262,14 @@ ECG_data <- ECG_data %>%
 # plots plots plots
 sum(is.na(ECG_data$time))
 
-ECG_data %>% 
+'ECG_data %>% 
   group_by(Group) %>% 
   ggplot(aes(time, HR1)) +
-  geom_smooth()
+  geom_smooth()'
 # Remove bad data
 
 # Save the data
-#write_csv(ECG_data, "/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/EM3_A4/ECG.data.csv")
+write_csv(ECG_data, "/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/EM3_A4/ECG.data.csv")
 ```
 
 *#HERE I WANT TO TRY AND MAKE SOME SUBSETS AND COMPARE THEM###*
@@ -274,20 +278,6 @@ ECG_data %>%
 
 ECG_data1 <- ECG_data
 
-#How many group do we have before removing NAs?
-ECG_data1 %>%
-  group_by(Group) %>% 
-  count(Condition, sort = T) %>% 
-  View()#We have 97 groups
-
-#TRYING TO REMOVE ALL NAs
-ECG_data1 <- na.omit(ECG_data1)
-
-#How many groups were completely removed?
-
-ECG_data1 %>%
-  group_by(Group) %>% 
-  count(Condition, sort = T) #We now only have 56 groups. 41 groups were removed completely 
 
 ECG_data1$time <- ifelse(ECG_data1$time > 35, #35 is the biggest "normal" number. The rest are multiplied.
        ECG_data1$time/10000,
@@ -298,15 +288,11 @@ sum(is.na(ECG_data1$time))
 
 
 
-#So we just decide to replace these NAs with the previous non-NA value
+'#So we just decide to replace these NAs with the previous non-NA value
 
 ECG_data1$time <- na.locf(ECG_data1$time, na.rm = TRUE) #This function takes the last non-NA value and replaces the NA value
-?na.locf
+?na.locf'
 
-
-ECG_data1 %>% 
-  group_by()
-ECG_data1$time2 <- 1:length(time)
 
 ECG_data1 %>%
   filter(Group == 302) %>%
@@ -361,14 +347,25 @@ ECG_data1 <- ECG_data1 %>%
 ## N.B. This is a bit tricky and you might have to do it in several steps
 
 ECG_data2 <- ECG_data1
-#22 change
-ECG_data2 <- gather(ECG_data2, "change_HR", 23:24)
+
+
+long <- tidyr::pivot_longer(ECG_data2, HR1_c_scaled:HR2_c_scaled, values_to = "HR_self")
+
+long$HR_other <- tidyr::pivot_longer(ECG_data2, c(HR2_c_scaled:HR1_c_scaled))['value']
+
+long$Resp_self <- tidyr::pivot_longer(ECG_data2, c(Resp1_c_scaled:Resp2_c_scaled))['value']
+
+long$Resp_other <- tidyr::pivot_longer(ECG_data2, c(Resp2_c_scaled:Resp1_c_scaled))['value']
+
+long$HR_self_lag <- tidyr::pivot_longer(ECG_data2, c(prev_HR1:prev_HR2))['value']
+
+long$HR_other_lag <- tidyr::pivot_longer(ECG_data2, c(prev_HR2:prev_HR1))['value']
+
 
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
 
 # Model change as a function of own and other previous state 
-model <- lmerTest::lmer(change_HR1~ prev_HR1 + prev_HR2 + Condition + (1|Group), ECG_data2)
-summary(model)
+model <- lmerTest::lmer(HR_self ~ HR_self_lag + HR_other_lag #ETC.)
 
 # Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
 
