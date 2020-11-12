@@ -3,11 +3,29 @@ title: "Assignment 4 - Heart rate, respiration and interpersonal coordination"
 author: "Riccardo Fusaroli"
 date: "August 20, 2019"
 output: html_document
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
+
+## Notes from class 12/11: 
+
+Time variable: 
+- it is like minutes, but each row roughly corresponds to one millisecond. 
+- roughly nr pr file 200,000 - each task is roughly 3 minutes.
+- nr of rows not the same for files, fine, for some P's the tasks do not take equal amount of time
+
+# LONG FORMAT
+pivot_longer() 
+gather()
+
+We want to predict MY heartrate now by my hr lagged + your hr lagged
+
+lmer(Hr_self ~ HR_self_lag + Hr_other_lag)
 
 # Assignment 4 - Heart rate, respiration and interpersonal coordination
 
@@ -61,56 +79,40 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 - downsample the data
 - Add a column for study, group, trial and condition
 
+# NEW CHUNK CLEAN
 ```{r}
 # Load the libraries
+pacman::p_load(dplyr,tidyverse,readr,ggplot2,groupdata2,cowplot, stringr,purrr,tidyr,reshape2,crqa)
 
 # Load the file
-# Plot
+d <-  read.csv("Study1_G1_T1_Synchronous.csv")
 
-## Remove outliers
+# Downsampling 
+d1 <- d %>% group(n = 100, method = 'greedy') %>% 
+  dplyr::summarise(time = mean(time,na.rm = T),
+                   HR1 = mean(HR1, na.rm = T),
+                   HR2 = mean(HR2, na.rm = T),
+                   Resp1 = mean(Resp1, na.rm = T),
+                   Resp2 = mean(Resp2, na.rm = T)) 
 
-### Tip, check the function below. This is the function explained in the video lecture
-removeOuts <- function(ts,threshold){
-  ts[ts > (mean(ts,na.rm=T) +
-             (threshold*sd(ts,na.rm=T))) | 
-       ts < (mean(ts,na.rm=T) -
-             (threshold*sd(ts,na.rm=T)))] = mean(ts,na.rm=T)
-  return(ts)
-}
-threshold=2.5 # Default value at 2.5 sds from the mean. But you can increase it, if you want.
+# Plot before removing outliers
+p <- ggplot(data = d) + geom_path(aes(time,HR1, color = "P1")) + geom_path(aes(time,HR2,color = "P2")) + labs(x = "time", y = "HR") + theme_classic()
 
+p
+```
 
-# Plot raw data against those with the artifacts removed
+# Outliers
+If you remove 2 times sd from the mean, you pretty much capture 95% of the data. If you move 3 sd, you capture 99%. Up to you to decide.
 
+We want the higher threshold to be higher than mean + threshold*sd of the timeseries. 
+We want the lower threshold to be lower than mean + threshold*sd of the timeseries. 
+Then, we want the function to make the extreme values be replaced by the threshold values. 
+If anything is above the higher-threshold, we want it to be replaced by mean + threshold*sd of the timeseries. 
+If anything is below the lower-threshold, we want it to be replaced by mean-threshold*sd of the timeseries.
 
-## Scale
-### Tip: if scale() gives some issues, try the one below
-#z_scale <- function(column){
-#  column_c <- (column - mean(column)) / sd(column)
-#}
+```{r}
 
-# Plot again to check how scaled data look like
-
-
-## Downsample
-### You can use the code below. It is almost the same as the one in the video lecture.
-#d1 = d %>%
-#  group(n = 100, method = 'greedy') %>%
-#  dplyr::summarise(
-#    time = mean(time,na.rm=T),
-#    HR1 = mean(HR1S,na.rm=T),
-#    HR2 = mean(HR2S,na.rm=T),
-#    Resp1 = mean(Resp1S,na.rm=T),
-#    Resp2 = mean(Resp2S,na.rm=T),
-#    rowname = rowname[1]) #the index we use to put them back together 
-
-## Plot the downsampled data. You can use the code from the slides
-
-
-## Now add the group, trial, condition to the cleaned up, scaled, downsampled data
-
-## Tip the info is in the file name
-
+# Function for outliers
 removeOuts <- function(ts, threshold){
   higher_threshold_condition <- ts > (mean(ts, na.rm = T) + (threshold*sd(ts, na.rm = T)))
   lower_threshold_condition <- ts < (mean(ts, na.rm = T) - (threshold*sd(ts, na.rm = T)))
@@ -119,9 +121,182 @@ removeOuts <- function(ts, threshold){
   return(ts)
 }
 
+# Threshold specification. 2.5 sd's from the mean
 threshold = 2.5
 
-remove outs (HR1, threshold) ....
+# Applying the function to columns, making new ones
+d1 <- d1 %>% 
+  mutate(HR1_c = removeOuts(HR1, threshold),#timeseries variable is HR1 here
+         HR2_c = removeOuts(HR2, threshold),
+         Resp1_c = removeOuts(Resp1, threshold),
+         Resp2_c = removeOuts(Resp2, threshold)) 
+
+# Plot after removing outliers
+p_c <- ggplot(data = d1) + geom_path(aes(time,HR1_c, color = "P1")) + geom_path(aes(time,HR2_c,color = "P2")) + labs(x = "time", y = "HR") + theme_classic()
+
+p_c
+
+# Both plots
+plot_grid(p,p_c, labels = c('With outliers', 'No outliers'))
+```
+
+Outlier correction is never neutral. We can replace it with the mean, replacement value. Here, we replaced it with the threshold value to not create too much of a bias in the dataset by replacing one or the other - but there are many imperfect ways of doing it.
+
+# Scale
+We want to scale the values.
+```{r}
+# Scaling
+d1 <- d1 %>% 
+  mutate(Resp1_s = scale(d1$Resp1_c),
+         Resp2_s = scale(d1$Resp2_c),
+         HR1_s = scale(d1$HR1_c),
+         HR2_s = scale(d1$HR2_c))
+
+### Tip: if scale() gives some issues, try the one below
+#z_scale <- function(column){
+#  column_c <- (column - mean(column)) / sd(column)
+#}
+
+
+```
+
+## Now add the group, trial, condition to the cleaned up, scaled, downsampled data
+## Tip the info is in the file name
+Filename: "Study1_G1_T1_Synchronous.csv"
+
+```{r}
+filename <- "Study1_G1_T1_Synchronous.csv"
+
+# Parse file name to extract study, group, trial, and condition
+Study <- str_extract(filename, 'Study.') %>% 
+  str_remove('Study')
+Study
+
+Group <- str_extract(filename, 'G.') %>% 
+  str_remove('G')
+Group
+
+Trial <- str_extract(filename, 'T.') %>% 
+  str_remove('T')
+Trial
+
+pos <- str_locate(filename, 'T1_')[1] #finding position of first T1_1
+len_split <- length(strsplit(filename,'')[[1]]) #finding number of characters in file name
+len_split 
+Condition <- substr(filename,pos,len_split)
+Condition <- substring(Condition,4)
+Condition <- str_sub(Condition, end=-5)
+Condition # NOT ELEGANT BUT WORKS
+
+# OTHER SOLUTIONS BUT I WANT TO MOVE ON
+# 
+# tbl$b <- sapply(strsplit(tbl$a, " "), function(filename) filename[which.max(nchar(filename))])
+# 
+# 
+# end <- strsplit(filename, split = "")[[1]],1)
+# class(filename)
+# 
+# t <- word(filename,-1)
+# [1] "fox"
+# tail(strsplit('this is a sentence',split=" ")[[1]],1)
+
+# Adding to dataframe
+d1 <- d1 %>% 
+  mutate(Study = Study,
+         Group = Group,
+         Trial = Trial,
+         Condition = Condition, 
+         )
+
+```
+
+```{r}
+# Define a function running the loading, artifact removal, scaling, downsampling, info adding.
+#df <- read.csv("Study1_G1_T1_Synchronous.csv", header = T)
+
+data_preprocess <- function(filename, threshold = 2.5){
+  # load data
+  df <- read.csv(paste0("data/", filename))
+  
+  # downsampling
+  d1 <- df %>% group(n = 100, method = 'greedy') %>% 
+  dplyr::summarise(ifelse(Study == 4, time = mean(min, na.rm = T), mean(time,na.rm = T)),
+                   HR1 = mean(HR1, na.rm = T),
+                   HR2 = mean(HR2, na.rm = T),
+                   Resp1 = mean(Resp1, na.rm = T),
+                   Resp2 = mean(Resp2, na.rm = T)) 
+  
+  # remove outliers
+  d1$HR1_c = removeOuts(d1$HR1, threshold)
+  d1$HR2_c = removeOuts(d1$HR2, threshold)
+  d1$Resp1_c = removeOuts(d1$Resp1, threshold)
+  d1$Resp2_c = removeOuts(d1$Resp2, threshold)
+
+  # scale
+  d1 <- d1 %>% mutate(
+    HR1_s = scale(d1$HR1_c),
+    HR2_s = scale(d1$HR2_c),
+    Resp1_s = scale(d1$Resp1_c),
+    Resp2_s = scale(d1$Resp2_c))
+
+  # info adding
+  Study <- str_extract(filename, 'Study.') %>% 
+  str_remove('Study')
+  
+  Group <- str_extract(filename, 'G.') %>% 
+  str_remove('G')
+  
+  Trial <- str_extract(filename, 'T.') %>% 
+  str_remove('T')
+  
+  pos <- str_locate(filename, 'T1_')[1] #finding position of first T1_1
+  len_split <- length(strsplit(filename,'')[[1]]) #finding number of characters in file name
+  Condition <- substr(filename,pos,len_split)
+  Condition <- substring(Condition,4)
+  Condition <- str_sub(Condition, end=-5)
+  Condition # NOT ELEGANT PLS CHANGE
+  
+  # Add to Dataframe
+  
+  # To be filled in
+  
+  d1 <- d1 %>% 
+  mutate(Study = Study,
+         Group = Group,
+         Trial = Trial,
+         Condition = Condition, 
+         )
+  
+  return(d1)
+
+}
+test <- data_preprocess("Study1_G1_T1_Synchronous.csv")
+
+#  Identify all files to be read
+#setwd("/Users/pernillebrams/Desktop/EM3/EM3_A4/data/")
+getwd()
+data <- list.files(path = "/Users/pernillebrams/Desktop/EM3/EM3_A4/data/", pattern = ".csv")
+
+
+# Run the function on the whole data-set using map_df
+hov_data <- data %>% 
+  purrr::map_df(data_preprocess) #It cannot open the connection for some reason, but will open Clement's
+
+# Now we need to make sure all the data are meaningful or something has to be removed
+# E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
+
+# plots plots plots
+
+# Remove bad data
+
+# Save the data
+
+```
+
+# Reading Clements data
+```{r}
+
+ECG <- read.csv("ECG.data.csv") 
 
 ```
 
@@ -157,7 +332,19 @@ data_preprocess <- function(filename, threshold = 2.5){
 # E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
 
 # plots plots plots
+# BAD PLOT from yt video: plot(ECG$HR1_c_scaled, type = "l")
 
+# Selecting columns time and HR1
+subset <- ECG %>% 
+  select(time,HR1)
+
+plot(subset, type = "l")
+  
+subset <- ECG %>% 
+  select(time,HR1_c_scaled)
+
+plot(subset, type = "l") #why those weird as hell lines
+  
 # Remove bad data
 
 # Save the data
@@ -167,8 +354,8 @@ data_preprocess <- function(filename, threshold = 2.5){
 ## Now we need to run some analysis
 
 Let's start with a multilevel model that accounts for 
-- stability (how each signal is autocorrelated)
-- interpersonal dependence (each signal is dependent from the previous state of the other signal)
+- stability (how each signal is auto-correlated) (longest diagonal line, LMAX, indicator of stability)
+- interpersonal dependence (each signal is dependent from the previous state of the other signal, lag)
 
 The data needs to be further prepared, so we can analyze both participants in the same model.
 We need to turn the data into a long format:
@@ -181,6 +368,11 @@ We can then run an analysis where change is a function of one's previous state (
 - set up the right random effects.
 - N.B. the model will be slow. Make sure it works on a subset of the data first!
 
+```{r}
+
+
+```
+
 Bonus question: what if we include an additional layer? Is my heart rate just adjusting to yours, or also to how much you are adjusting to mine?
 - to start answering this we can add a column indicating the previous change in hr in the other and one in respiration
 - we can then build on the previous models by also adding the previous change in the other
@@ -191,19 +383,61 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 # Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
 # Generate a column for each: change in HR1, HR2, Resp1, Resp2
 
+ECG <- ECG %>% 
+  mutate(
+    HR1_c_s_lag = lag(HR1_c_scaled),
+    HR2_c_s_lag = lag(HR2_c_scaled),
+    Resp1_c_s_lag = lag(Resp1_c_scaled),
+    Resp2_c_s_lag = lag(Resp2_c_scaled))
+
+ECG <- ECG %>% 
+  mutate(
+    change_HR1 = HR1_c_scaled - HR1_c_s_lag,
+    change_HR2 = HR2_c_scaled - HR2_c_s_lag,
+    change_Resp1 = Resp1_c_scaled - Resp1_c_s_lag,
+    change_Resp2 = Resp2_c_scaled - Resp2_c_s_lag)
 
 # Make the data long, so we can analyze both participants at the same time. Tip: you can use the function gather () 
-## N.B. This is a bit tricky and you might have to do it in several steps
+## N.B. This is a bit tricky and you might have to do it in several steps. 
+ECG_long <- ECG %>% 
+  select(Study, Trial, Group, Condition, HR1_c_scaled, HR2_c_s_lag, time) %>% 
+  group_by(Study, Trial, Group) %>% 
+  gather(key = "measure", value = "HR", HR1_c_scaled,HR2_c_s_lag)
 
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
+ECG$Condition <- as.factor(ECG$Condition)
+levels(ECG$Condition) #"Conversation" "MovementCoop" "MovementGuided" "SelfPaced" "Synchronous" "TurnTaking"  
 
 # Model change as a function of own and other previous state 
-
+#change ~ own + other-previous 
 
 # Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
 
 ```
 
+In the above example with gather, the source columns that are gathered are specified with control:cond2. This means to use all the columns, positionally, between control and cond2. Another way of doing it is to name the columns individually.
+```{r}
+# Trying to use CRQA
+?crqa
+
+ts1 <- ECG %>% 
+  select(time,HR1_c_scaled)
+
+ts2 <- ECG %>% 
+  select(time,HR2_c_s_lag)
+
+#crqa(ts1, ts2, delay, embed, rescale, radius, normalize, mindiagline, minvertline, tw, whiteline, recpt, side, method, metric, datatype)
+delay = 1; embed = 1; rescale = 0; radius = .1;
+normalize = 0; mindiagline = 2; minvertline = 2;
+tw = 0; whiteline = FALSE; recpt = FALSE; side = "both"
+method = 'crqa'; metric = 'euclidean';  
+datatype = "continuous"
+
+ans = crqa(ts1, ts2, delay, embed, rescale, radius, normalize, 
+           mindiagline, minvertline, tw, whiteline, recpt, side, method,
+           metric, datatype)
+# Multilevel model that accounts for stability 
+```
 
 ## Now we need to create control baselines.
 
@@ -217,7 +451,7 @@ Tip: sample() is your friend, but make sure to shuffle things within participant
 ```{r}
 
 # Create a shuffled dataset
-# Concatenate it to the original dataset (and remember to have a column telling you which is which)
+# Concatenate it to the original data-set (and remember to have a column telling you which is which)
 
 # Create the same models as in the previous chunk, but adding an interaction by shuffled vs. real
 
@@ -226,6 +460,7 @@ Tip: sample() is your friend, but make sure to shuffle things within participant
  
 ### TRICKY! Creating controls: surrogate pair controls
  - Per each real pair, identify at least one surrogate pair (matching one of the participants, with somebody doing the same task, but in a different pair)
+ So a surrogate pair is person A from pair 1, and person B from pair 2. ?? Not same task? 
 
 ```{r}
 
