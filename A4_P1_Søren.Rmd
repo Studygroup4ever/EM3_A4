@@ -73,11 +73,6 @@ d2 <- d2 %>%
                    Resp1 = mean(Resp1,na.rm=T),
                    Resp2 = mean(Resp2,na.rm=T))
 
-
-
-
-
-
 #Downsampling
 d1 = d1 %>%
   group(n = 100, method = 'greedy') %>%
@@ -206,7 +201,7 @@ ECG_data <- list.files(path = "data/", pattern = ".csv")
 df <- ECG_data %>% 
   purrr::map_df(data_preprocess)
 
-df <- ECG_df
+#df <- ECG_df
 
 df <- df %>% 
   mutate(
@@ -218,19 +213,18 @@ df <- df %>%
     )
 
 # Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
+# Generate a column for each: change in HR1, HR2, Resp1, Resp2
 df <- df %>% 
   mutate(prev_HR1 = lag(HR1_c_scaled),
          prev_HR2 = lag(HR2_c_scaled),
          prev_Resp1 = lag(Resp1_c_scaled),
-         prev_Resp2 = lag(Resp2_c_scaled))
-
-# Generate a column for each: change in HR1, HR2, Resp1, Resp2
-df <- df %>% 
-  mutate(change_HR1 = HR1_c_scaled-prev_HR1,
+         prev_Resp2 = lag(Resp2_c_scaled),
+         change_HR1 = HR1_c_scaled-prev_HR1,
          change_HR2 = HR2_c_scaled-prev_HR2,
          change_Resp1 = Resp1_c_scaled-prev_Resp1,
-         change_Resp2 = Resp2_c_scaled-prev_Resp2)
-         
+         change_Resp2 = Resp2_c_scaled-prev_Resp2
+         )
+
 # Now we need to make sure all the data are meaningful or if something has to be removed
 # E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
 
@@ -240,41 +234,29 @@ df %>%
   group_by(Group) %>% 
   ggplot(aes(time, HR1)) +
   geom_smooth()
+
 # Remove bad data
 
 # Save the data
-#write_csv(pitch_data, "/Users/cleme/Desktop/3. Semester CogSci/Exp Meth 3/Portfolios/Portfolio 2/A3-P2/pitch_data.csv")
+
 ```
 
-```{r}
-#df <- read_csv('ECG.data.csv')
-```
 
 ```{r}
 long <-
   tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
 
-long$HR_other <-
-  tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']]
-
-long$HR_self_lag <-
-  tidyr::pivot_longer(df, c(prev_HR1, prev_HR2))[['value']]
-
-long$HR_other_lag <-
-  tidyr::pivot_longer(df, c(prev_HR2, prev_HR1))[['value']]
-
-long$Resp_self <-
-  tidyr::pivot_longer(df, c(Resp1_c_scaled, Resp2_c_scaled))[['value']]
-
-long$Resp_other <-
-  tidyr::pivot_longer(df, c(Resp2_c_scaled, Resp1_c_scaled))[['value']]
-
-long$Resp_self_lag <-
-  tidyr::pivot_longer(df, c(prev_Resp1, prev_Resp2))[['value']]
-
-long$Resp_other_lag <-
-  tidyr::pivot_longer(df, c(prev_Resp2, prev_Resp1))[['value']]
-
+long <- long %>%
+  mutate(
+    HR_other = tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']],
+    HR_self_lag = tidyr::pivot_longer(df, c(prev_HR1, prev_HR2))[['value']],
+    HR_other_lag = tidyr::pivot_longer(df, c(prev_HR2, prev_HR1))[['value']],
+    Resp_self = tidyr::pivot_longer(df, c(Resp1_c_scaled, Resp2_c_scaled))[['value']],
+    Resp_other = tidyr::pivot_longer(df, c(Resp2_c_scaled, Resp1_c_scaled))[['value']],
+    Resp_self_lag = tidyr::pivot_longer(df, c(prev_Resp1, prev_Resp2))[['value']],
+    Resp_other_lag = tidyr::pivot_longer(df, c(prev_Resp2, prev_Resp1))[['value']],
+    Participant = paste0(Group, str_extract_numbers(name))
+  )
 
 ```
 
