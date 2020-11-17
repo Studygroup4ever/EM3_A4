@@ -82,7 +82,7 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 # NEW CHUNK CLEAN
 ```{r}
 # Load the libraries
-pacman::p_load(dplyr,tidyverse,readr,ggplot2,groupdata2,cowplot, stringr,purrr,tidyr,reshape2,crqa)
+pacman::p_load(dplyr,tidyverse,readr,ggplot2,groupdata2,cowplot, stringr,purrr,tidyr,reshape2,crqa,strex,stringr,stats)
 
 # Load the file
 d <-  read.csv("Study1_G1_T1_Synchronous.csv")
@@ -315,13 +315,13 @@ A couple of tips:
 ```{r}
 # Define a function running the loading, artifact removal, scaling, downsampling, info adding.
 
-data_preprocess <- function(filename, threshold = 2.5){
-  
-  # To be filled in
-  
-  return(d1)
-
-}
+# data_preprocess <- function(filename, threshold = 2.5){
+#   
+#   # To be filled in
+#   
+#   return(d1)
+# 
+# }
 
 #  Identify all files to be read
 
@@ -335,15 +335,15 @@ data_preprocess <- function(filename, threshold = 2.5){
 # BAD PLOT from yt video: plot(ECG$HR1_c_scaled, type = "l")
 
 # Selecting columns time and HR1
-subset <- ECG %>% 
-  select(time,HR1)
-
-plot(subset, type = "l")
-  
-subset <- ECG %>% 
-  select(time,HR1_c_scaled)
-
-plot(subset, type = "l") #why those weird as hell lines
+# subset <- ECG %>% 
+#   select(time,HR1)
+# 
+# plot(subset, type = "l")
+#   
+# subset <- ECG %>% 
+#   select(time,HR1_c_scaled)
+# 
+# plot(subset, type = "l") #why those weird as hell lines
   
 # Remove bad data
 
@@ -368,22 +368,6 @@ We can then run an analysis where change is a function of one's previous state (
 - set up the right random effects.
 - N.B. the model will be slow. Make sure it works on a subset of the data first!
 
-```{r}
-# Make long
-longHR <- tidyr::pivot_longer(ECG,c(HR1_c_scaled,HR2_c_scaled), values_to = "HRself")
-longHR$other <- tidyr::pivot_longer(ECG,c(HR2_c_scaled,HR1_c_scaled), values_to = "HRother")[['HRother']] #two square brackets
-
-longRESP <- tidyr::pivot_longer(ECG,c(Resp1_c_scaled,Resp2_c_scaled), values_to = "RESPself")
-longRESP$other <- tidyr::pivot_longer(ECG,c(Resp2_c_scaled,Resp1_c_scaled), values_to = "RESPother" )[['RESPother']] #only concerning 'value'
-
-# Make lag
-longHR <- longHR %>% 
-  mutate(
-    HRlag = lag(HRself)
-  )
-
-```
-
 Bonus question: what if we include an additional layer? Is my heart rate just adjusting to yours, or also to how much you are adjusting to mine?
 - to start answering this we can add a column indicating the previous change in hr in the other and one in respiration
 - we can then build on the previous models by also adding the previous change in the other
@@ -393,30 +377,60 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 
 # Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
 # Generate a column for each: change in HR1, HR2, Resp1, Resp2
+variable.names(ECG)
+library(dplyr)
 
+#Calculate lag (LEAD). Previous state / future state - we choose future state
+ECG <- ECG %>% 
+  group_by(Group, Condition) %>% 
+  mutate(
+    HR1_c_s_lead = lead(HR1_c_scaled),
+    HR2_c_s_lead = lead(HR2_c_scaled),
+    Resp1_c_s_lead = lead(Resp1_c_scaled),
+    Resp2_c_s_lead = lead(Resp2_c_scaled))
+# So in the HR1Lead, then it has moved one row up. It has the FUTURE one, the one that comes next
+ 
+# Calculate change
 ECG <- ECG %>% 
   mutate(
-    HR1_c_s_lag = lag(HR1_c_scaled),
-    HR2_c_s_lag = lag(HR2_c_scaled),
-    Resp1_c_s_lag = lag(Resp1_c_scaled),
-    Resp2_c_s_lag = lag(Resp2_c_scaled))
-
-ECG <- ECG %>% 
-  mutate(
-    change_HR1 = HR1_c_scaled - HR1_c_s_lag,
-    change_HR2 = HR2_c_scaled - HR2_c_s_lag,
-    change_Resp1 = Resp1_c_scaled - Resp1_c_s_lag,
-    change_Resp2 = Resp2_c_scaled - Resp2_c_s_lag)
+    change_HR1 = HR1_c_s_lead - HR1_c_scaled,
+    change_HR2 = HR1_c_s_lead - HR2_c_scaled,
+    change_Resp1 = Resp1_c_s_lead - Resp1_c_scaled,
+    change_Resp2 = Resp2_c_s_lead - Resp2_c_scaled)
+# Change is the change between HR1 before and HR1 now. 
 
 # Make the data long, so we can analyze both participants at the same time. Tip: you can use the function gather () 
 ## N.B. This is a bit tricky and you might have to do it in several steps. 
-ECG_long <- ECG %>% 
-  select(Study, Trial, Group, Condition, HR1_c_scaled, HR2_c_s_lag, time) %>% 
-  group_by(Study, Trial, Group) %>% 
-  gather(key = "measure", value = "HR", HR1_c_scaled,HR2_c_s_lag)
+
+# Make long
+# HR
+long <- tidyr::pivot_longer(ECG,c(HR1_c_scaled,HR2_c_scaled), values_to = "HRself")
+
+long$HR_other <- tidyr::pivot_longer(ECG,c(HR2_c_scaled,HR1_c_scaled))[['value']]
+
+long$HR_self_lead <- tidyr::pivot_longer(ECG,c(HR1_c_s_lead,HR2_c_s_lead))[['value']]
+
+long$HR_other_lead <- tidyr::pivot_longer(ECG,c(HR2_c_s_lead,HR1_c_s_lead))[['value']]
+
+# Resp
+long$R_self <- tidyr::pivot_longer(ECG,c(Resp1_c_scaled,Resp2_c_scaled), values_to = "Rself")[['Rself']]
+
+long$R_other <- tidyr::pivot_longer(ECG,c(Resp2_c_scaled,Resp1_c_scaled))[['Rself']]
+
+long$R_self_lead <- tidyr::pivot_longer(ECG,c(Resp1_c_s_lead,Resp2_c_s_lead))[['Rself']]
+
+long$R_other_lead <- tidyr::pivot_longer(ECG,c(Resp2_c_s_lead,Resp1_c_s_lead))[['value']]
+
+# Add participant
+long <- long %>% 
+  mutate(Participant = paste0(Group, strex::str_extract_numbers(name)))
+
+# REMOVE NA
+long <- long %>% 
+  subset(!is.na(time))
 
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
-ECG$Condition <- as.factor(ECG$Condition)
+
 levels(ECG$Condition) #"Conversation" "MovementCoop" "MovementGuided" "SelfPaced" "Synchronous" "TurnTaking"  
 
 # Model change as a function of own and other previous state 
@@ -426,28 +440,95 @@ levels(ECG$Condition) #"Conversation" "MovementCoop" "MovementGuided" "SelfPaced
 
 ```
 
+Starting with a single participant:
+We can
+- HR Change ~ 1 + HR_self + HR_other
+- HR Change ~ 1 + (HR_self + HR_other) * Condition 
+- HR Change ~ 0 + (HR_self + HR_other) * Condition 
+
+# Making models
+```{r}
+library(lme4)
+variable.names(long)
+
+# one p, so no random effects
+HR_model1 <- lm(change_HR1 ~ 0 + (HRself + HR_other):Condition, subset(long, Study == "3" & Participant == 3022))
+summary(HR_model1)
+
+# We can see that the coefficients from self is not good at predicting change.
+# Say, the HRself:ConditionSynchronous estimate was signi., like it was in Buras, then 
+# being that it is positive, it is predicting away from stability. It is predicting positive change. 
+
+```
+
+##Plot
+```{r}
+
+# line plot
+p <- long %>% 
+  subset(Study == "3" & Condition == "Conversation") %>% 
+  group_by(Participant) %>% 
+  mutate(time = seq(n())) %>%   # instead of having minute 1 and 2, we will create timestamps. No of rows the P has, sort of restarts the sequence
+  subset(Participant == 3022) %>% 
+  ggplot() + 
+  geom_line(aes(time, HRself, color = "HRself")) + # line for self
+  geom_line(aes(time, HR_other, color = "HR_other"))+ # line for other
+  theme_classic()
+p
+
+# other plot with all conditions
+p1 <- long %>% 
+  subset(Study == "3") %>% 
+  group_by(Participant, Condition) %>% 
+  mutate(time = seq(n())) %>%   
+  subset(Participant == 3022) %>% 
+  ggplot() + 
+  geom_line(aes(time, HRself, color = "HRself")) + # line for self
+  geom_line(aes(time, HR_other, color = "HR_other"))+ # line for other
+  facet_wrap(Condition~., ncol = 1) + 
+  theme_classic()
+p1
+```
+
+Covariation or coupling here?
+
+The model bura made is predicting towards no change. 
+
+Using entire dataset, subset on small scale: 
+```{r}
+variable.names(long)
+
+# Add random effect
+HR_model0 <- lmerTest::lmer(change_HR1 ~ 0 + (HRself + HR_other):Condition + (0+Condition|Participant) + (0+Condition|Group), subset(long, Study == "3"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+summary(HR_model0)
+```
+
+
+
+
 In the above example with gather, the source columns that are gathered are specified with control:cond2. This means to use all the columns, positionally, between control and cond2. Another way of doing it is to name the columns individually.
 ```{r}
-# Trying to use CRQA
-?crqa
-
-ts1 <- ECG %>% 
-  select(time,HR1_c_scaled)
-
-ts2 <- ECG %>% 
-  select(time,HR2_c_s_lag)
-
-#crqa(ts1, ts2, delay, embed, rescale, radius, normalize, mindiagline, minvertline, tw, whiteline, recpt, side, method, metric, datatype)
-delay = 1; embed = 1; rescale = 0; radius = .1;
-normalize = 0; mindiagline = 2; minvertline = 2;
-tw = 0; whiteline = FALSE; recpt = FALSE; side = "both"
-method = 'crqa'; metric = 'euclidean';  
-datatype = "continuous"
-
-ans = crqa(ts1, ts2, delay, embed, rescale, radius, normalize, 
-           mindiagline, minvertline, tw, whiteline, recpt, side, method,
-           metric, datatype)
-# Multilevel model that accounts for stability 
+# # Trying to use CRQA
+# ?crqa
+# 
+# ts1 <- ECG %>% 
+#   select(time,HR1_c_scaled)
+# 
+# ts2 <- ECG %>% 
+#   select(time,HR2_c_s_lag)
+# 
+# #crqa(ts1, ts2, delay, embed, rescale, radius, normalize, mindiagline, minvertline, tw, whiteline, recpt, side, method, metric, datatype)
+# delay = 1; embed = 1; rescale = 0; radius = .1;
+# normalize = 0; mindiagline = 2; minvertline = 2;
+# tw = 0; whiteline = FALSE; recpt = FALSE; side = "both"
+# method = 'crqa'; metric = 'euclidean';  
+# datatype = "continuous"
+# 
+# ans = crqa(ts1, ts2, delay, embed, rescale, radius, normalize, 
+#            mindiagline, minvertline, tw, whiteline, recpt, side, method,
+#            metric, datatype)
+# # Multilevel model that accounts for stability 
 ```
 
 ## Now we need to create control baselines.
@@ -462,6 +543,7 @@ Tip: sample() is your friend, but make sure to shuffle things within participant
 ```{r}
 
 # Create a shuffled dataset
+
 # Concatenate it to the original data-set (and remember to have a column telling you which is which)
 
 # Create the same models as in the previous chunk, but adding an interaction by shuffled vs. real
