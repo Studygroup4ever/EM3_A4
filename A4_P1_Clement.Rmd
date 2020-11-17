@@ -349,24 +349,37 @@ ECG_data1 <- ECG_data1 %>%
 ECG_data2 <- ECG_data1
 
 
+  
+  
+  
+
 long <- tidyr::pivot_longer(ECG_data2, HR1_c_scaled:HR2_c_scaled, values_to = "HR_self")
 
-long$HR_other <- tidyr::pivot_longer(ECG_data2, c(HR2_c_scaled:HR1_c_scaled))['value']
+long$HR_other <- tidyr::pivot_longer(ECG_data2, c(HR2_c_scaled:HR1_c_scaled))[['value']]
 
-long$Resp_self <- tidyr::pivot_longer(ECG_data2, c(Resp1_c_scaled:Resp2_c_scaled))['value']
+long$Resp_self <- tidyr::pivot_longer(ECG_data2, c(Resp1_c_scaled:Resp2_c_scaled))[['value']]
 
-long$Resp_other <- tidyr::pivot_longer(ECG_data2, c(Resp2_c_scaled:Resp1_c_scaled))['value']
+long$Resp_other <- tidyr::pivot_longer(ECG_data2, c(Resp2_c_scaled:Resp1_c_scaled))[['value']]
 
-long$HR_self_lag <- tidyr::pivot_longer(ECG_data2, c(prev_HR1:prev_HR2))['value']
+long$HR_self_lag <- tidyr::pivot_longer(ECG_data2, c(prev_HR1:prev_HR2))[['value']]
 
-long$HR_other_lag <- tidyr::pivot_longer(ECG_data2, c(prev_HR2:prev_HR1))['value']
+long$HR_other_lag <- tidyr::pivot_longer(ECG_data2, c(prev_HR2:prev_HR1))[['value']]
 
+#Making a participant column
+long$alternate <- as.numeric(rep(c(1,2), 17895))
+
+
+long$Participant <- paste0(long$Group,long$alternate)
 
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
+subset_study1 <- long %>% 
+  filter(long$Study == 1)
 
 # Model change as a function of own and other previous state 
-model <- lmerTest::lmer(HR_self ~ HR_self_lag + HR_other_lag #ETC.)
 
+model <- lmerTest::lmer(HR_self ~ HR_self_lag + HR_other_lag + Condition + (1+Participant|Group), data = subset_study1)
+
+summary(model)
 # Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
 
 ```
