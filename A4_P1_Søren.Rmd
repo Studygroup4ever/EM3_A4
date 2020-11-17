@@ -56,7 +56,7 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 # Load the libraries
 library(pacman)
 
-p_load(ggplot2, tidyverse, dplyr, groupdata2, strex, zoo, readr)
+p_load(ggplot2, tidyverse, dplyr, groupdata2, strex, zoo, readr, stats)
 ```
 
 ```{r}
@@ -201,7 +201,8 @@ ECG_data <- list.files(path = "data/", pattern = ".csv")
 df <- ECG_data %>% 
   purrr::map_df(data_preprocess)
 
-#df <- ECG_df
+df1 <- df
+df <- df1
 
 df <- df %>% 
   mutate(
@@ -214,16 +215,18 @@ df <- df %>%
 
 # Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
 # Generate a column for each: change in HR1, HR2, Resp1, Resp2
-df <- df %>% 
-  mutate(prev_HR1 = lag(HR1_c_scaled),
-         prev_HR2 = lag(HR2_c_scaled),
-         prev_Resp1 = lag(Resp1_c_scaled),
-         prev_Resp2 = lag(Resp2_c_scaled),
-         change_HR1 = HR1_c_scaled-prev_HR1,
-         change_HR2 = HR2_c_scaled-prev_HR2,
-         change_Resp1 = Resp1_c_scaled-prev_Resp1,
-         change_Resp2 = Resp2_c_scaled-prev_Resp2
-         )
+df <-  df %>% 
+  group_by(Group, Condition, Trial) %>% 
+  mutate(next_HR1 = lead(HR1_c_scaled),
+         next_HR2 = lead(HR2_c_scaled),
+         next_Resp1 = lead(Resp1_c_scaled),
+         next_Resp2 = lead(Resp2_c_scaled),
+         change_HR1 = next_HR1 - HR1_c_scaled,
+         change_HR2 = next_HR2 - HR2_c_scaled,
+         change_Resp1 = next_Resp1 - Resp1_c_scaled,
+         change_Resp2 = next_Resp2 - Resp2_c_scaled
+         ) %>% 
+   subset(!is.na(time))
 
 # Now we need to make sure all the data are meaningful or if something has to be removed
 # E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
@@ -247,14 +250,15 @@ long <-
   tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
 
 long <- long %>%
+  ungroup() %>% 
   mutate(
     HR_other = tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']],
-    HR_self_lag = tidyr::pivot_longer(df, c(prev_HR1, prev_HR2))[['value']],
-    HR_other_lag = tidyr::pivot_longer(df, c(prev_HR2, prev_HR1))[['value']],
+    HR_self_lead = tidyr::pivot_longer(df, c(next_HR1, next_HR2))[['value']],
+    HR_other_lead = tidyr::pivot_longer(df, c(next_HR2, next_HR1))[['value']],
     Resp_self = tidyr::pivot_longer(df, c(Resp1_c_scaled, Resp2_c_scaled))[['value']],
     Resp_other = tidyr::pivot_longer(df, c(Resp2_c_scaled, Resp1_c_scaled))[['value']],
-    Resp_self_lag = tidyr::pivot_longer(df, c(prev_Resp1, prev_Resp2))[['value']],
-    Resp_other_lag = tidyr::pivot_longer(df, c(prev_Resp2, prev_Resp1))[['value']],
+    Resp_self_lead = tidyr::pivot_longer(df, c(next_Resp1, next_Resp2))[['value']],
+    Resp_other_lead = tidyr::pivot_longer(df, c(next_Resp2, next_Resp1))[['value']],
     Participant = paste0(Group, str_extract_numbers(name))
   )
 
