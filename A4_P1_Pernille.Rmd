@@ -374,6 +374,7 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 
 
 ```{r}
+ECG <- read.csv("ECG.data.csv")
 
 # Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
 # Generate a column for each: change in HR1, HR2, Resp1, Resp2
@@ -404,7 +405,7 @@ ECG <- ECG %>%
 
 # Make long
 # HR
-long <- tidyr::pivot_longer(ECG,c(HR1_c_scaled,HR2_c_scaled), values_to = "HRself")
+long <- tidyr::pivot_longer(ECG,c(HR1_c_scaled,HR2_c_scaled), values_to = "HR_self")
 
 long$HR_other <- tidyr::pivot_longer(ECG,c(HR2_c_scaled,HR1_c_scaled))[['value']]
 
@@ -420,6 +421,15 @@ long$R_other <- tidyr::pivot_longer(ECG,c(Resp2_c_scaled,Resp1_c_scaled))[['Rsel
 long$R_self_lead <- tidyr::pivot_longer(ECG,c(Resp1_c_s_lead,Resp2_c_s_lead))[['Rself']]
 
 long$R_other_lead <- tidyr::pivot_longer(ECG,c(Resp2_c_s_lead,Resp1_c_s_lead))[['value']]
+
+# Change
+long$change_HR1_self <- tidyr::pivot_longer(ECG,c(change_HR1,change_HR2))[['value']]
+
+long$change_HR2_other <- tidyr::pivot_longer(ECG,c(change_HR2,change_HR1))[['value']]
+
+long$change_Resp1_self <- tidyr::pivot_longer(ECG,c(change_Resp1,change_Resp2))[['value']]
+
+long$change_Resp2_other <- tidyr::pivot_longer(ECG,c(change_Resp2,change_Resp1))[['value']]
 
 # Add participant
 long <- long %>% 
@@ -452,7 +462,7 @@ library(lme4)
 variable.names(long)
 
 # one p, so no random effects
-HR_model1 <- lm(change_HR1 ~ 0 + (HRself + HR_other):Condition, subset(long, Study == "3" & Participant == 3022))
+HR_model1 <- lm(change_HR1 ~ 0 + (HR_self + HR_other):Condition, subset(long, Study == "3" & Participant == 3022))
 summary(HR_model1)
 
 # We can see that the coefficients from self is not good at predicting change.
@@ -463,7 +473,6 @@ summary(HR_model1)
 
 ##Plot
 ```{r}
-
 # line plot
 p <- long %>% 
   subset(Study == "3" & Condition == "Conversation") %>% 
@@ -471,7 +480,7 @@ p <- long %>%
   mutate(time = seq(n())) %>%   # instead of having minute 1 and 2, we will create timestamps. No of rows the P has, sort of restarts the sequence
   subset(Participant == 3022) %>% 
   ggplot() + 
-  geom_line(aes(time, HRself, color = "HRself")) + # line for self
+  geom_line(aes(time, HR_self, color = "HR_self")) + # line for self
   geom_line(aes(time, HR_other, color = "HR_other"))+ # line for other
   theme_classic()
 p
@@ -483,7 +492,7 @@ p1 <- long %>%
   mutate(time = seq(n())) %>%   
   subset(Participant == 3022) %>% 
   ggplot() + 
-  geom_line(aes(time, HRself, color = "HRself")) + # line for self
+  geom_line(aes(time, HR_self, color = "HR_self")) + # line for self
   geom_line(aes(time, HR_other, color = "HR_other"))+ # line for other
   facet_wrap(Condition~., ncol = 1) + 
   theme_classic()
@@ -499,9 +508,13 @@ Using entire dataset, subset on small scale:
 variable.names(long)
 
 # Add random effect
-HR_model0 <- lmerTest::lmer(change_HR1 ~ 0 + (HRself + HR_other):Condition + (0+Condition|Participant) + (0+Condition|Group), subset(long, Study == "3"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+HR_model0 <- lmerTest::lmer(change_HR1_self ~ 0 + (HR_self + HR_other):Condition + (0+Condition|Participant) + (0+Condition|Group), subset(long, Study == "3"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
 
 summary(HR_model0)
+
+# Clement model
+HR_model1 <- lmerTest::lmer(change_H)
+
 ```
 
 
