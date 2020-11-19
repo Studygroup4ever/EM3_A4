@@ -396,7 +396,10 @@ long$Participant <- paste0(long$Group,long$alternate)
 
 # Model change as a function of own and other previous state 
 
-model <- lmerTest::lmer(change_HR_self ~ (HR_self + HR_other):Condition + (1+Participant|Group), subset(long, Study == "1"))
+model <- lmerTest::lmer(change_HR_self ~ (HR_self + HR_other):Condition + (1+Participant|Group), subset(long, Study == "1"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+#The actual dynamical system model
+#dx/dt = a1(xt) + a2(yt - xt) :::::: xt = HR:self at timepoint :::: yt = HR_other at timepoint ::::: a1 = slope for "HR regulation" ::::: a2 = slope for HR_other regulation
 
 summary(model)
 # Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
@@ -409,7 +412,7 @@ summary(HR_model1)
 p1 <- long %>% 
   subset(Study == "3") %>% 
   group_by(Participant, Condition) %>% 
-  mutate(time = seq(n())) %>%   
+  #mutate(time = seq(n())) %>%   
   subset(Participant == 3022) %>% 
   ggplot() + 
   geom_line(aes(time, HR_self, color = "HR_self")) + # line for self
@@ -426,16 +429,42 @@ First shuffled controls, then surrogate pairs.
 
 ### Creating controls: shuffled controls
 
-Shuffled controls break the temporal dependencies of time-series by shuffling the value within one time-series. This ensures the "coordination" observed is not due to the actual values in the series and not their sequence.
+Shuffled controls break the temporal dependencies of time-series by shuffling the value within one time-series. **This ensures the "coordination" observed is not due to the actual values in the series and not their sequence.**
 Tip: sample() is your friend, but make sure to shuffle things within participant/condition and not throughout the whole dataset
  
 ```{r}
 
 # Create a shuffled dataset
+long$Type <- "Real"
+
+long <- long %>% 
+  mutate(HR_diff = HR_other - HR_self)
+
+long_shuffled <- long %>% 
+  group_by(Participant, Condition) %>% 
+  mutate(HR_self = sample(HR_self),
+         HR_other = sample(HR_other),
+         Resp_self = sample(Resp_self),
+         Resp_other = sample(Resp_other),
+         change_HR_self = sample(change_HR_self),
+         change_HR_other = sample(change_HR_other),
+         HR_diff = sample(HR_diff),
+         Type = "Shuffled")
 # Concatenate it to the original dataset (and remember to have a column telling you which is which)
+long_merged <- rbind(long, long_shuffled)
 
 # Create the same models as in the previous chunk, but adding an interaction by shuffled vs. real
 
+#Model for "Study 1". 
+model_controlled <- lmerTest::lmer(change_HR_self ~ 0 +(HR_self + HR_other):Condition + (HR_self + HR_other):Type + (1+Participant|Group), subset(long_merged, Study == "1"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+#Model for a random participant
+#model_controlled <- lmerTest::lmer(change_HR_self ~ 0 + (HR_self + HR_other):Condition + (HR_self + HR_other):Type + (1+Participant|Group), subset(long_merged, Study == "1" & Participant == 1012), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+model_controlled_klara <- lmerTest::lmer(change_HR_self ~ 0 + HR_diff:Condition + (HR_self + HR_other):Condition + Type + (0+Condition|Group) + (0+Condition|Participant), subset(long_merged, Study == "1"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+summary(model_controlled)
+summary(model_controlled_klara)
 ```
  
  
