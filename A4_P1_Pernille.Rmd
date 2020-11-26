@@ -507,6 +507,10 @@ Using entire dataset, subset on small scale:
 ```{r}
 variable.names(long)
 
+#Model
+HR_model0 <- lmerTest::lmer(change_HR1_self ~ 0 + (HR_self + HR_other):Condition + (0+Condition|Participant) + (0+Condition|Group), subset(long, Study == "3"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+
 # Add random effect
 HR_model0 <- lmerTest::lmer(change_HR1_self ~ 0 + (HR_self + HR_other):Condition + (0+Condition|Participant) + (0+Condition|Group), subset(long, Study == "3"), REML = F, control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
 
@@ -516,9 +520,6 @@ summary(HR_model0)
 HR_model1 <- lmerTest::lmer(change_H)
 
 ```
-
-
-
 
 In the above example with gather, the source columns that are gathered are specified with control:cond2. This means to use all the columns, positionally, between control and cond2. Another way of doing it is to name the columns individually.
 ```{r}
@@ -554,8 +555,30 @@ Shuffled controls break the temporal dependencies of time-series by shuffling th
 Tip: sample() is your friend, but make sure to shuffle things within participant/condition and not throughout the whole dataset
  
 ```{r}
+# Load new data
+df <- read.csv("longV1.csv")
+
+df$Type <- "Real"
 
 # Create a shuffled dataset
+shuff <- df %>% 
+  group_by(Participant,Condition) %>% 
+  mutate(
+    HR_self = sample(HR_self), #randomly samples values from the column
+    HR_other = sample(HR_other),
+    Resp_self = sample(Resp_self),
+    Resp_other = sample(Resp_other),
+    change_HR_self = sample(change_HR_self),
+    change_Resp_self = sample(change_Resp_self),
+    Type = "Shuffled")
+
+# Merge
+dfmerge <- rbind(df,shuff)
+variable.names(dfmerge)
+
+dfmerge <- dfmerge %>% 
+  mutate(diff = HR_other - HR_self)
+
 
 # Concatenate it to the original data-set (and remember to have a column telling you which is which)
 
