@@ -77,6 +77,7 @@ A couple of tips:
 # file<- paste0("data/", filename)
 # read_delim(file, ',')
 
+# Function for removing outliers and replacing the values with sd * threshold +/- the mean value
 removeOuts <- function(ts,threshold){
   ts[ts > (mean(ts,na.rm=T) +
              (threshold*sd(ts,na.rm=T))) | 
@@ -85,12 +86,12 @@ removeOuts <- function(ts,threshold){
   return(ts)
 }
 
-
+# Function for scaling
 z_scale <- function(column){
  column_c <- (column - mean(column, na.rm=T)) / sd(column, na.rm=T)
 }
 
-
+# Function for preprocessing the data
 data_preprocess <- function(filename, threshold = 2.5) {
   df <- read_delim(paste0("data/", filename), delim = ",")
    
@@ -104,7 +105,7 @@ data_preprocess <- function(filename, threshold = 2.5) {
     Study, Group, Trial, Condition
   ))))
   names(vars) <- c("Study", "Group", "Trial", "Condition")
- 
+
 # Downsampling
   df <- df %>%
     group(n = 100, method = 'greedy') %>%
@@ -142,6 +143,7 @@ data_preprocess <- function(filename, threshold = 2.5) {
 df <- list.files(path = "data/", pattern = ".csv") %>%
   purrr::map_df(data_preprocess)
 
+# Correcting the classes and removin NA's
 df <- df %>%
   mutate(
     Study = as.factor(Study),
@@ -152,6 +154,7 @@ df <- df %>%
   ) %>%
   subset(!is.na(time)) 
 
+# Removing study 1 because it doesn't have the same conditions as the other studies and selecting only the conditions that are in all studies
 df <- df %>% filter(
   Study != 1,
   Condition == 'Conversation' |
@@ -180,7 +183,9 @@ df <- df %>% filter(
 
 
 ```{r}
+# Function for making the df long - we are going to do this twice
 make_long <- function(df) {
+  # Creating the columns we want
   df <-  df %>%
   group_by(Group, Condition, Trial) %>%
   mutate(
@@ -195,10 +200,11 @@ make_long <- function(df) {
   ) %>%
   ungroup()
   
-  
+  # Making the long format 
   long2 <-
     tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
   
+  # Making other columns in the long df that we want for the models
   long2 <- long2 %>%
     mutate(
       HR_other = tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']],
@@ -217,6 +223,7 @@ make_long <- function(df) {
       Resp_diff = Resp_self - Resp_other
     )
   
+  # Remocing columns we don't want
   long <- long2 %>%
     select(
       -c(
@@ -265,108 +272,108 @@ long <- make_long(df)
 SP by group
 
 ```{r}
-sp_df <- df %>% 
-  filter(Group != 408) 
-
-#min <- sp_df %>% group_by(Group, Condition) %>% tally()
-#min(min$n)
-
-sp_df <- sp_df %>% 
-  filter(as.numeric(.groups) <= 1747)
-
-#sp_df %>% group_by(.groups) %>% tally()
-#nlevels(sp_df$Group)
-
-sp_df <- sp_df %>% 
-  ungroup() %>% 
-  mutate(Group = as.numeric(as.factor(Group)))
-
-#nlevels(as.factor(sp_df$Group))
-
-obj_HR <- data.frame(x = 1:5241)
-obj_Resp <- data.frame(x = 1:5241)
-
-for(i in 1:22){
-  d <- sp_df %>% filter(Group == i)
-  obj_HR[,i] <- d$HR2_c_scaled
-  obj_Resp[,i] <- d$Resp2_c_scaled
-}
-
-list = 1:22
-repeat {
-  x <- as.numeric(sample(x = list, 22, replace = FALSE))
-  
-  if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
-    break
-  } else
-    x <- 0
-}
-
-HR2_SP <- obj_HR
-Resp2_SP <- obj_Resp
-
-for(i in 1:22){
-  HR2_SP[, i] <- obj_HR[, x[i]]
-  Resp2_SP[, i] <- obj_Resp[, x[i]]
-}
-
-sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
-sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
-
-long_SP <- make_long(sp_df)
+# sp_df <- df %>% 
+#   filter(Group != 408) 
+# 
+# #min <- sp_df %>% group_by(Group, Condition) %>% tally()
+# #min(min$n)
+# 
+# sp_df <- sp_df %>% 
+#   filter(as.numeric(.groups) <= 1747)
+# 
+# #sp_df %>% group_by(.groups) %>% tally()
+# #nlevels(sp_df$Group)
+# 
+# sp_df <- sp_df %>% 
+#   ungroup() %>% 
+#   mutate(Group = as.numeric(as.factor(Group)))
+# 
+# #nlevels(as.factor(sp_df$Group))
+# 
+# obj_HR <- data.frame(x = 1:5241)
+# obj_Resp <- data.frame(x = 1:5241)
+# 
+# for(i in 1:22){
+#   d <- sp_df %>% filter(Group == i)
+#   obj_HR[,i] <- d$HR2_c_scaled
+#   obj_Resp[,i] <- d$Resp2_c_scaled
+# }
+# 
+# list = 1:22
+# repeat {
+#   x <- as.numeric(sample(x = list, 22, replace = FALSE))
+#   
+#   if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+#     break
+#   } else
+#     x <- 0
+# }
+# 
+# HR2_SP <- obj_HR
+# Resp2_SP <- obj_Resp
+# 
+# for(i in 1:22){
+#   HR2_SP[, i] <- obj_HR[, x[i]]
+#   Resp2_SP[, i] <- obj_Resp[, x[i]]
+# }
+# 
+# sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
+# sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
+# 
+# long_SP <- make_long(sp_df)
 
 ```
 
 SP by condition if conditions don't matter
 
 ```{r}
-sp_df <- df %>% 
-  filter(Group != 408) 
-
-#min <- sp_df %>% group_by(Group, Condition) %>% tally()
-#min(min$n)
-
-sp_df <- sp_df %>% 
-  filter(as.numeric(.groups) <= 1747)
-
-#sp_df %>% group_by(.groups) %>% tally()
-#nlevels(sp_df$Group)
-
-sp_df <- sp_df %>% 
-  ungroup() %>% 
-  mutate(n = as.numeric(as.factor(paste0(Group, Trial))))
-
-obj_HR <- data.frame(x = 1:1747)
-obj_Resp <- data.frame(x = 1:1747)
-
-for(i in 1:66){
-  d <- sp_df %>% filter(n == i)
-  obj_HR[,i] <- d$HR2_c_scaled
-  obj_Resp[,i] <- d$Resp2_c_scaled
-}
-
-list = 1:66
-repeat {
-  x <- as.numeric(sample(x = list, 66, replace = FALSE))
-  
-  if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
-    break
-  } else
-    x <- 0
-}
-
-HR2_SP <- obj_HR
-Resp2_SP <- obj_Resp
-
-for(i in 1:66){
-  HR2_SP[, i] <- obj_HR[, x[i]]
-  Resp2_SP[, i] <- obj_Resp[, x[i]]
-}
-
-sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
-sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
-
-long_SP <- make_long(sp_df)
+# sp_df <- df %>% 
+#   filter(Group != 408) 
+# 
+# #min <- sp_df %>% group_by(Group, Condition) %>% tally()
+# #min(min$n)
+# 
+# sp_df <- sp_df %>% 
+#   filter(as.numeric(.groups) <= 1747)
+# 
+# #sp_df %>% group_by(.groups) %>% tally()
+# #nlevels(sp_df$Group)
+# 
+# sp_df <- sp_df %>% 
+#   ungroup() %>% 
+#   mutate(n = as.numeric(as.factor(paste0(Group, Trial))))
+# 
+# obj_HR <- data.frame(x = 1:1747)
+# obj_Resp <- data.frame(x = 1:1747)
+# 
+# for(i in 1:66){
+#   d <- sp_df %>% filter(n == i)
+#   obj_HR[,i] <- d$HR2_c_scaled
+#   obj_Resp[,i] <- d$Resp2_c_scaled
+# }
+# 
+# list = 1:66
+# repeat {
+#   x <- as.numeric(sample(x = list, 66, replace = FALSE))
+#   
+#   if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+#     break
+#   } else
+#     x <- 0
+# }
+# 
+# HR2_SP <- obj_HR
+# Resp2_SP <- obj_Resp
+# 
+# for(i in 1:66){
+#   HR2_SP[, i] <- obj_HR[, x[i]]
+#   Resp2_SP[, i] <- obj_Resp[, x[i]]
+# }
+# 
+# sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
+# sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
+# 
+# long_SP <- make_long(sp_df)
 
 ```
 
@@ -384,7 +391,7 @@ sp_df <- df %>%
 #min <- sp_df %>% group_by(Group, Condition) %>% tally()
 #min(min$n)
 
-# The lowest amount of observations now is 1747
+# The lowest amount of observations now is 1747 - now they are all the same length
 sp_df <- sp_df %>% 
   filter(as.numeric(.groups) <= 1747)
 
@@ -408,17 +415,21 @@ for(j in 1:3) {
   obj_HR <- data.frame(x = 1:1747)
   obj_Resp <- data.frame(x = 1:1747)
   
-  # list with the different groups 
+  # List with the different groups 
   list <- as.numeric(levels(as.factor(con_df$n)))
   
+  # Looping through the participants per condition and adding their HR and Resp to a place holder object
   for (i in 1:22) {
     d <- con_df %>% filter(n == list[i])
     obj_HR[, i] <- d$HR2_c_scaled
     obj_Resp[, i] <- d$Resp2_c_scaled
   }
+  
+  # Making a new place holder with the same size by duplicating the old place holder
   HR2_SP <- obj_HR
   Resp2_SP <- obj_Resp
   
+  # Making a random list of new surrogate pairs with no overlaps
   repeat {
     x <- as.numeric(sample(x = list, 22, replace = FALSE))
     
@@ -428,16 +439,19 @@ for(j in 1:3) {
       x <- 0
   }
   
+  # Scrambling the order of HR and Resp acording to the surrogate pair
   for (i in 1:22) {
     HR2_SP[, i] <- obj_HR[, x[i]]
     Resp2_SP[, i] <- obj_Resp[, x[i]]
   }
   
+  # Unlisting the HR and Resp in the new scrambled order
   HR_place[[j]] <- unlist(HR2_SP, use.names = F)
   Resp_place[[j]] <- unlist(Resp2_SP, use.names = F)
   
 }
 
+# Filtering by condition and adding HR and Resp in the new scrambled order
 sp_df1 <- sp_df %>% 
   filter(Condition == conditions[1]) %>% 
   mutate(
@@ -445,6 +459,7 @@ sp_df1 <- sp_df %>%
     Resp2_c_scaled = Resp_place[[1]]
   )
 
+# Filtering by condition and adding HR and Resp in the new scrambled order
 sp_df2 <- sp_df %>% 
   filter(Condition == conditions[2]) %>% 
   mutate(
@@ -452,6 +467,7 @@ sp_df2 <- sp_df %>%
     Resp2_c_scaled = Resp_place[[2]]
   )
 
+# Filtering by condition and adding HR and Resp in the new scrambled order
 sp_df3 <- sp_df %>% 
   filter(Condition == conditions[3]) %>% 
   mutate(
@@ -459,13 +475,14 @@ sp_df3 <- sp_df %>%
     Resp2_c_scaled = Resp_place[[3]]
   )
 
+# Collecting the data and making it long
+long_SP <- rbind(sp_df1, sp_df2, sp_df3) %>% make_long()
 
+# df for checking if we done it right
 compare_df <- df %>% 
   filter(Group != 408,
          as.numeric(.groups) <= 1747
          ) 
-
-long_SP <- rbind(sp_df1, sp_df2, sp_df3) %>% make_long_yes()
 
 sp_df <- rbind(sp_df1, sp_df2, sp_df3)
 
@@ -501,7 +518,7 @@ HR_m0 <-
     subset(long, Study == "1"),
     REML = F,
     control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE)
-  )
+  ) 
 
 HR_m1 <- lmerTest::lmer(
   change_HR_self ~
