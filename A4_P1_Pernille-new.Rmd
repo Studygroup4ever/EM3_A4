@@ -84,21 +84,21 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 # Load the libraries
 pacman::p_load(dplyr,tidyverse,readr,ggplot2,groupdata2,cowplot, stringr,purrr,tidyr,reshape2,crqa,strex,stringr,stats)
 
-# Load the file
-d <-  read.csv("Study1_G1_T1_Synchronous.csv")
+# Load a file
+#d <-  read.csv("Study1_G1_T1_Synchronous.csv")
 
 # Downsampling 
-d1 <- d %>% group(n = 100, method = 'greedy') %>% 
-  dplyr::summarise(time = mean(time,na.rm = T),
-                   HR1 = mean(HR1, na.rm = T),
-                   HR2 = mean(HR2, na.rm = T),
-                   Resp1 = mean(Resp1, na.rm = T),
-                   Resp2 = mean(Resp2, na.rm = T)) 
+# d1 <- d %>% group(n = 100, method = 'greedy') %>% 
+#   dplyr::summarise(time = mean(time,na.rm = T),
+#                    HR1 = mean(HR1, na.rm = T),
+#                    HR2 = mean(HR2, na.rm = T),
+#                    Resp1 = mean(Resp1, na.rm = T),
+#                    Resp2 = mean(Resp2, na.rm = T)) 
 
 # Plot before removing outliers
-p <- ggplot(data = d) + geom_path(aes(time,HR1, color = "P1")) + geom_path(aes(time,HR2,color = "P2")) + labs(x = "time", y = "HR") + theme_classic()
+#p <- ggplot(data = d) + geom_path(aes(time,HR1, color = "P1")) + geom_path(aes(time,HR2,color = "P2")) + labs(x = "time", y = "HR") + theme_classic()
 
-p
+#p
 ```
 
 # Outliers
@@ -121,18 +121,82 @@ removeOuts <- function(ts, threshold){
   return(ts)
 }
 
+# defining z scale function
+z_scale <- function(column){
+ column_c <- (column - mean(column, na.rm=T)) / sd(column, na.rm=T)
+}
+
 # Threshold specification. 2.5 sd's from the mean
 threshold = 2.5
 
-# Applying the function to columns, making new ones
-d1 <- d1 %>% 
-  mutate(HR1_c = removeOuts(HR1, threshold),#timeseries variable is HR1 here
-         HR2_c = removeOuts(HR2, threshold),
-         Resp1_c = removeOuts(Resp1, threshold),
-         Resp2_c = removeOuts(Resp2, threshold)) 
+# data preprocessing
+data_preprocess <- function(filename, threshold = 2.5) {
+  df <- read_delim(paste0("data/", filename), delim = ",")
+   
+# parse filename; study, group, trial, type
+  numbers <- as.data.frame(str_extract_numbers(filename))
+  Study <- numbers[1,]
+  Group <- 100 * Study + numbers[2, ]
+  Trial <- numbers[3,]
+  Condition <- str_extract(filename, "[a-zA-Z]{9,14}")
+  vars <- as.data.frame(t(cbind(c(
+    Study, Group, Trial, Condition
+  ))))
+  names(vars) <- c("Study", "Group", "Trial", "Condition")
+ 
+# Downsampling
+  df <- df %>%
+    group(n = 100, method = 'greedy') %>%
+    dplyr::summarise(
+      time = ifelse(Study == 4, mean(min, na.rm = T), mean(time, na.rm = T)),
+      HR1 = mean(HR1, na.rm = T),
+      HR2 = mean(HR2, na.rm = T),
+      Resp1 = mean(Resp1, na.rm = T),
+      Resp2 = mean(Resp2, na.rm = T)
+    )
+ 
+ # Remove outliers (comment out if you want to do without outliers)
+  df <- df %>%
+    mutate(
+      HR1_c = removeOuts(HR1, threshold),
+      HR2_c = removeOuts(HR2, threshold),
+      Resp1_c = removeOuts(Resp1, threshold),
+       Resp2_c = removeOuts(Resp2, threshold),
+       HR1_c_scaled = z_scale(HR1_c),
+       HR2_c_scaled = z_scale(HR2_c),
+       Resp1_c_scaled = z_scale(Resp1_c),
+       Resp2_c_scaled = z_scale(Resp2_c)
+     )
+   
+  df <- cbind(vars, df)
+  return(df)
+}
+
+# Identify all files to be read
+# Run the function on the whole dataset using map_df
+df <- list.files(path = "data/", pattern = ".csv") %>%
+  purrr::map_df(data_preprocess)
+
+df <- df %>%
+  mutate(
+    Study = as.factor(Study),
+    Group = as.factor(Group),
+    Condition = as.factor(Condition),
+    Trial = as.factor(Trial),
+    time = ifelse(df$time > 30000, df$time / 10000, df$time)
+  ) %>%
+  subset(!is.na(time)) 
+
+df <- df %>% filter(
+  Study != 1,
+  Condition == 'Conversation' |
+    Condition == 'Synchronous' | 
+    Condition == 'TurnTaking'
+)
+
 
 # Plot after removing outliers
-p_c <- ggplot(data = d1) + geom_path(aes(time,HR1_c, color = "P1")) + geom_path(aes(time,HR2_c,color = "P2")) + labs(x = "time", y = "HR") + theme_classic()
+p_c <- ggplot(data = df) + geom_path(aes(time,HR1_c, color = "HR1")) + geom_path(aes(time,HR2_c,color = "HR2")) + labs(x = "time", y = "HR") + theme_classic()
 
 p_c
 
@@ -141,6 +205,237 @@ plot_grid(p,p_c, labels = c('With outliers', 'No outliers'))
 ```
 
 Outlier correction is never neutral. We can replace it with the mean, replacement value. Here, we replaced it with the threshold value to not create too much of a bias in the dataset by replacing one or the other - but there are many imperfect ways of doing it.
+
+# Make long function + apply it to df
+```{r}
+
+make_long <- function(df) {
+  
+  # Mutating lead-columns
+  df <-  df %>%
+  group_by(Group, Condition, Trial) %>% 
+  mutate(
+    next_HR1 = lead(HR1_c_scaled),
+    next_HR2 = lead(HR2_c_scaled),
+    next_Resp1 = lead(Resp1_c_scaled),
+    next_Resp2 = lead(Resp2_c_scaled),
+    change_HR1 = next_HR1 - HR1_c_scaled,
+    change_HR2 = next_HR2 - HR2_c_scaled,
+    change_Resp1 = next_Resp1 - Resp1_c_scaled,
+    change_Resp2 = next_Resp2 - Resp2_c_scaled
+  ) %>%
+  ungroup()
+  
+  # Using pivot_longer now
+  long2 <-
+    tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
+  
+  # Mutating new columns
+  long2 <- long2 %>%
+    mutate(
+      HR_other = tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']],
+      HR_self_lead = tidyr::pivot_longer(df, c(next_HR1, next_HR2))[['value']],
+      HR_other_lead = tidyr::pivot_longer(df, c(next_HR2, next_HR1))[['value']],
+      Resp_self = tidyr::pivot_longer(df, c(Resp1_c_scaled, Resp2_c_scaled))[['value']],
+      Resp_other = tidyr::pivot_longer(df, c(Resp2_c_scaled, Resp1_c_scaled))[['value']],
+      Resp_self_lead = tidyr::pivot_longer(df, c(next_Resp1, next_Resp2))[['value']],
+      Resp_other_lead = tidyr::pivot_longer(df, c(next_Resp2, next_Resp1))[['value']],
+      change_HR_self = tidyr::pivot_longer(df, c(change_HR1, change_HR2))[['value']],
+      change_HR_other = tidyr::pivot_longer(df, c(change_HR2, change_HR1))[['value']],
+      change_Resp_self = tidyr::pivot_longer(df, c(change_Resp1, change_Resp2))[['value']],
+      change_Resp_other = tidyr::pivot_longer(df, c(change_Resp2, change_Resp1))[['value']],
+      Participant = paste0(Group, str_extract_numbers(name)),
+      HR_diff = HR_self - HR_other,
+      Resp_diff = Resp_self - Resp_other
+    )
+  
+  long <- long2 %>%
+    select(
+      -c(
+        'HR1',
+        'HR2',
+        'Resp1',
+        'Resp2',
+        'HR1_c',
+        'HR2_c',
+        'Resp1_c',
+        'Resp2_c',
+        'Resp1_c_scaled',
+        'Resp2_c_scaled',
+        'next_HR1',
+        'next_HR2',
+        'next_Resp1',
+        'next_Resp2',
+        'change_HR1',
+        'change_HR2',
+        'change_Resp1',
+        'change_Resp2',
+        '.groups',
+      )
+    )
+  
+  return(long)
+}
+
+# Make df long
+long <- make_long(df)
+
+```
+
+# Surrogate pairs by BUURA
+Why surrogate pairs? 
+
+You need to create list for every single study and then in the end make 1 big list. 
+```{r}
+
+View(df)
+# Create lists that contain group ID's pr individual study
+Groups2 <- unique(as.numeric(as.character(df$Group))[df$Study == 2])
+SurrogateList2 <- expand.grid(a = Groups2, b = Groups2) %>% subset(a != b) #only those were the two groups arent the same
+
+Groups3 <- unique(as.numeric(as.character(df$Group))[df$Study == 3])
+SurrogateList3 <- expand.grid(a = Groups3, b = Groups3) %>% subset(a != b) #only those were the two groups arent the same
+
+Groups4 <- unique(as.numeric(as.character(df$Group))[df$Study == 4])
+SurrogateList4 <- expand.grid(a = Groups4, b = Groups4) %>% subset(a != b) #only those were the two groups arent the same
+
+# In the end...
+SurrogateList <- rbind(SurrogateList2,SurrogateList3,SurrogateList4)
+SurrogateList
+
+```
+
+# Loop
+```{r}
+for (i in 1:nrow(SurrogateList)) {
+  x <-
+    subset(df, Group == SurrogateList$a[i]) #Create a subset where group = the ith element of the surrogate list a column
+  y <- subset(df, Group == SurrogateList$b[i]) #Same with column b
+  group <- 800 + i #Create ID's, 801, 802, so on...
+  for (condition in c("Synchronous",
+                      "TurnTaking",
+                      "Self-paced",
+                      "Conversation",
+                      "MovementCoop") {
+    #Making sure we pair up conditions and not only groups
+    if (condition %in% unique(x$condition) &
+        condition %in% unique(y$condition)) {
+      z1 <- subset(x, condition == condition)
+      z2 <- subset(y, condition == condition)
+    }
+    if (nrow(z1 > nrow(z2)) {
+      z1 <- z1[-((nrow(z2) + 1):nrow(z1)), ]
+    }
+    if (nrow(z2 > nrow(z1)) {
+      z2 <- z2[-((nrow(z1) + 1):nrow(z2)), ]
+    }
+    w1 <- z1 %>% mutate(
+      HR2 = z2$HR2,
+      Resp2 = z2$Resp2,
+      HR2_lead = z2$HR2_lead,
+      Resp2_lead = z2$Resp2_lead,
+      HR2_change = z2$HR2_change,
+      Resp2_change = z2$Resp2_change
+    )
+    
+    w1$Group <- Group
+    w1$Type <- "Surrogate"
+    w <- w1
+    if (exists("d_surrogate")) {
+      d_surrogate <- rbind(d_surrogate, w)
+      else
+        (d_surrogate <- w)
+    }
+  }
+}
+```
+
+*Function*:
+?expand.grid # Creates data frame from all combinations of the supplied vectors or factors. 
+
+# Surrogate pairs BY SØREN
+```{r}
+# Check which pair has lowest amount of data points
+min <- df %>% group_by(Group, Condition) %>% tally()
+min(min$n)
+
+# That is 408. It looks very varying across conditions in amount of data points. We will remove that one
+sp_df <- df %>% 
+  filter(Group != 408)
+
+# Check which pair has lowest amount of data points now
+min <- sp_df %>% group_by(Group, Condition) %>% tally()
+min(min$n)
+
+# That is 1747. We will set it to this, so that we only have df with datapoints under 1747
+sp_df <- sp_df %>% 
+  filter(as.numeric(.groups) <= 1747)
+
+# Check how many pairs
+sp_df %>% group_by(.groups) %>% tally()
+nlevels(sp_df$Group)
+
+sp_df <- sp_df %>% 
+  ungroup() %>% 
+  mutate(Group = as.numeric(as.factor(Group)))
+
+#nlevels(as.factor(sp_df$Group))
+
+obj_HR <- data.frame(x = 1:5241)
+obj_Resp <- data.frame(x = 1:5241)
+
+for(i in 1:22){
+  d <- sp_df %>% filter(Group == i)
+  obj_HR[,i] <- d$HR2_c_scaled
+  obj_Resp[,i] <- d$Resp2_c_scaled
+}
+
+list = 1:22
+repeat {
+  x <- as.numeric(sample(x = list, 22, replace = FALSE))
+  
+  if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+    break
+  } else
+    x <- 0
+}
+
+HR2_SP <- obj_HR
+Resp2_SP <- obj_Resp
+
+for(i in 1:22){
+  HR2_SP[, i] <- obj_HR[, x[i]]
+  Resp2_SP[, i] <- obj_Resp[, x[i]]
+}
+
+sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
+sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
+
+long_SP <- make_long(sp_df)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Scale
 We want to scale the values.
