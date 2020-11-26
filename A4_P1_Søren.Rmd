@@ -408,17 +408,21 @@ for(j in 1:3) {
   obj_HR <- data.frame(x = 1:1747)
   obj_Resp <- data.frame(x = 1:1747)
   
-  # list with the different groups 
+  # List with the different groups 
   list <- as.numeric(levels(as.factor(con_df$n)))
   
+  # Looping through the participants per condition and adding their HR and Resp to a place holder object
   for (i in 1:22) {
     d <- con_df %>% filter(n == list[i])
     obj_HR[, i] <- d$HR2_c_scaled
     obj_Resp[, i] <- d$Resp2_c_scaled
   }
+  
+  # Making a new place holder with the same size by duplicating the old place holder
   HR2_SP <- obj_HR
   Resp2_SP <- obj_Resp
   
+  # Making a random list of new surrogate pairs with no overlaps
   repeat {
     x <- as.numeric(sample(x = list, 22, replace = FALSE))
     
@@ -428,16 +432,19 @@ for(j in 1:3) {
       x <- 0
   }
   
+  # Scrambling the order of HR and Resp acording to the surrogate pair
   for (i in 1:22) {
     HR2_SP[, i] <- obj_HR[, x[i]]
     Resp2_SP[, i] <- obj_Resp[, x[i]]
   }
   
+  # Unlisting the HR and Resp in the new scrambled order
   HR_place[[j]] <- unlist(HR2_SP, use.names = F)
   Resp_place[[j]] <- unlist(Resp2_SP, use.names = F)
   
 }
 
+# Filtering by condition and adding HR and Resp in the new scrambled order
 sp_df1 <- sp_df %>% 
   filter(Condition == conditions[1]) %>% 
   mutate(
@@ -445,6 +452,7 @@ sp_df1 <- sp_df %>%
     Resp2_c_scaled = Resp_place[[1]]
   )
 
+# Filtering by condition and adding HR and Resp in the new scrambled order
 sp_df2 <- sp_df %>% 
   filter(Condition == conditions[2]) %>% 
   mutate(
@@ -452,6 +460,7 @@ sp_df2 <- sp_df %>%
     Resp2_c_scaled = Resp_place[[2]]
   )
 
+# Filtering by condition and adding HR and Resp in the new scrambled order
 sp_df3 <- sp_df %>% 
   filter(Condition == conditions[3]) %>% 
   mutate(
@@ -459,15 +468,19 @@ sp_df3 <- sp_df %>%
     Resp2_c_scaled = Resp_place[[3]]
   )
 
+# Collecting the data and making it long
+long_SP <- rbind(sp_df1, sp_df2, sp_df3) %>% make_long()
 
+# df for checking if we done it right
 compare_df <- df %>% 
   filter(Group != 408,
          as.numeric(.groups) <= 1747
          ) 
 
-long_SP <- rbind(sp_df1, sp_df2, sp_df3) %>% make_long_yes()
-
 sp_df <- rbind(sp_df1, sp_df2, sp_df3)
+
+# Seeing if we did it right
+as.numeric(compare_df$Resp2_c_scaled == sp_df$Resp2_c_scaled) %>% sum() # The data overlaps 3494ish places - this is low enough to be random though
 
 ```
 
