@@ -272,108 +272,108 @@ long <- make_long(df)
 SP by group
 
 ```{r}
-sp_df <- df %>% 
-  filter(Group != 408) 
-
-#min <- sp_df %>% group_by(Group, Condition) %>% tally()
-#min(min$n)
-
-sp_df <- sp_df %>% 
-  filter(as.numeric(.groups) <= 1747)
-
-#sp_df %>% group_by(.groups) %>% tally()
-#nlevels(sp_df$Group)
-
-sp_df <- sp_df %>% 
-  ungroup() %>% 
-  mutate(Group = as.numeric(as.factor(Group)))
-
-#nlevels(as.factor(sp_df$Group))
-
-obj_HR <- data.frame(x = 1:5241)
-obj_Resp <- data.frame(x = 1:5241)
-
-for(i in 1:22){
-  d <- sp_df %>% filter(Group == i)
-  obj_HR[,i] <- d$HR2_c_scaled
-  obj_Resp[,i] <- d$Resp2_c_scaled
-}
-
-list = 1:22
-repeat {
-  x <- as.numeric(sample(x = list, 22, replace = FALSE))
-  
-  if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
-    break
-  } else
-    x <- 0
-}
-
-HR2_SP <- obj_HR
-Resp2_SP <- obj_Resp
-
-for(i in 1:22){
-  HR2_SP[, i] <- obj_HR[, x[i]]
-  Resp2_SP[, i] <- obj_Resp[, x[i]]
-}
-
-sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
-sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
-
-long_SP <- make_long(sp_df)
+# sp_df <- df %>% 
+#   filter(Group != 408) 
+# 
+# #min <- sp_df %>% group_by(Group, Condition) %>% tally()
+# #min(min$n)
+# 
+# sp_df <- sp_df %>% 
+#   filter(as.numeric(.groups) <= 1747)
+# 
+# #sp_df %>% group_by(.groups) %>% tally()
+# #nlevels(sp_df$Group)
+# 
+# sp_df <- sp_df %>% 
+#   ungroup() %>% 
+#   mutate(Group = as.numeric(as.factor(Group)))
+# 
+# #nlevels(as.factor(sp_df$Group))
+# 
+# obj_HR <- data.frame(x = 1:5241)
+# obj_Resp <- data.frame(x = 1:5241)
+# 
+# for(i in 1:22){
+#   d <- sp_df %>% filter(Group == i)
+#   obj_HR[,i] <- d$HR2_c_scaled
+#   obj_Resp[,i] <- d$Resp2_c_scaled
+# }
+# 
+# list = 1:22
+# repeat {
+#   x <- as.numeric(sample(x = list, 22, replace = FALSE))
+#   
+#   if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+#     break
+#   } else
+#     x <- 0
+# }
+# 
+# HR2_SP <- obj_HR
+# Resp2_SP <- obj_Resp
+# 
+# for(i in 1:22){
+#   HR2_SP[, i] <- obj_HR[, x[i]]
+#   Resp2_SP[, i] <- obj_Resp[, x[i]]
+# }
+# 
+# sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
+# sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
+# 
+# long_SP <- make_long(sp_df)
 
 ```
 
 SP by condition if conditions don't matter
 
 ```{r}
-sp_df <- df %>% 
-  filter(Group != 408) 
-
-#min <- sp_df %>% group_by(Group, Condition) %>% tally()
-#min(min$n)
-
-sp_df <- sp_df %>% 
-  filter(as.numeric(.groups) <= 1747)
-
-#sp_df %>% group_by(.groups) %>% tally()
-#nlevels(sp_df$Group)
-
-sp_df <- sp_df %>% 
-  ungroup() %>% 
-  mutate(n = as.numeric(as.factor(paste0(Group, Trial))))
-
-obj_HR <- data.frame(x = 1:1747)
-obj_Resp <- data.frame(x = 1:1747)
-
-for(i in 1:66){
-  d <- sp_df %>% filter(n == i)
-  obj_HR[,i] <- d$HR2_c_scaled
-  obj_Resp[,i] <- d$Resp2_c_scaled
-}
-
-list = 1:66
-repeat {
-  x <- as.numeric(sample(x = list, 66, replace = FALSE))
-  
-  if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
-    break
-  } else
-    x <- 0
-}
-
-HR2_SP <- obj_HR
-Resp2_SP <- obj_Resp
-
-for(i in 1:66){
-  HR2_SP[, i] <- obj_HR[, x[i]]
-  Resp2_SP[, i] <- obj_Resp[, x[i]]
-}
-
-sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
-sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
-
-long_SP <- make_long(sp_df)
+# sp_df <- df %>% 
+#   filter(Group != 408) 
+# 
+# #min <- sp_df %>% group_by(Group, Condition) %>% tally()
+# #min(min$n)
+# 
+# sp_df <- sp_df %>% 
+#   filter(as.numeric(.groups) <= 1747)
+# 
+# #sp_df %>% group_by(.groups) %>% tally()
+# #nlevels(sp_df$Group)
+# 
+# sp_df <- sp_df %>% 
+#   ungroup() %>% 
+#   mutate(n = as.numeric(as.factor(paste0(Group, Trial))))
+# 
+# obj_HR <- data.frame(x = 1:1747)
+# obj_Resp <- data.frame(x = 1:1747)
+# 
+# for(i in 1:66){
+#   d <- sp_df %>% filter(n == i)
+#   obj_HR[,i] <- d$HR2_c_scaled
+#   obj_Resp[,i] <- d$Resp2_c_scaled
+# }
+# 
+# list = 1:66
+# repeat {
+#   x <- as.numeric(sample(x = list, 66, replace = FALSE))
+#   
+#   if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+#     break
+#   } else
+#     x <- 0
+# }
+# 
+# HR2_SP <- obj_HR
+# Resp2_SP <- obj_Resp
+# 
+# for(i in 1:66){
+#   HR2_SP[, i] <- obj_HR[, x[i]]
+#   Resp2_SP[, i] <- obj_Resp[, x[i]]
+# }
+# 
+# sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
+# sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
+# 
+# long_SP <- make_long(sp_df)
 
 ```
 
