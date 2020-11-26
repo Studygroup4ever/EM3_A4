@@ -56,66 +56,8 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 # Load the libraries
 library(pacman)
 
-p_load(ggplot2, tidyverse, dplyr, groupdata2, strex, zoo, readr, stats)
+p_load(ggplot2, tidyverse, dplyr, groupdata2, strex, zoo, readr, lmerTest)
 ```
-
-```{r}
-# Load the file
-d1 <- read_csv("data/Study1_G1_T1_Synchronous.csv")
-
-d2 <- read_csv("data/Study3_G8_T3_Conversation.csv")
-
-d2 <- d2 %>%
-  group(n = 100, method = 'greedy') %>%
-  dplyr::summarise(time = mean(time,na.rm=T),
-                   HR1 = mean(HR1,na.rm=T),
-                   HR2 = mean(HR2,na.rm=T),
-                   Resp1 = mean(Resp1,na.rm=T),
-                   Resp2 = mean(Resp2,na.rm=T))
-
-#Downsampling
-d1 = d1 %>%
-  group(n = 100, method = 'greedy') %>%
-  dplyr::summarise(time = mean(time,na.rm=T),
-                   HR1 = mean(HR1,na.rm=T),
-                   HR2 = mean(HR2,na.rm=T),
-                   Resp1 = mean(Resp1,na.rm=T),
-                   Resp2 = mean(Resp2,na.rm=T))
-
-
-```
-
-
-
-```{r}
-# Plot
-## Remove outliers
-### Tip, check the function below. This is the function explained in the video lecture
-# Default value at 2.5 sds from the mean. But you can increase it, if you want.
-# Plot raw data against those with the artifacts removed
-## Scale
-### Tip: if scale() gives some issues, try the one below
-# Plot again to check how scaled data look like
-## Downsample
-### You can use the code below. It is almost the same as the one in the video lecture.
-d1 = d %>%
- group(n = 100, method = 'greedy') %>%
- dplyr::summarise(
-   time = mean(time,na.rm=T),
-   HR1 = mean(HR1S,na.rm=T),
-   HR2 = mean(HR2S,na.rm=T),
-   Resp1 = mean(Resp1S,na.rm=T),
-   Resp2 = mean(Resp2S,na.rm=T),
-   rowname = rowname[1]) #the index we use to put them back together
-## Plot the downsampled data. You can use the code from the slides
-## Now add the group, trial, condition to the cleaned up, scaled, downsampled data
-## Tip the info is in the file name
-```
-
-```{r}
-data_list = list.files(path = "data/", pattern = ".csv")
-```
-
 
 ## Now we are ready to go to load and pre-process all files
 
@@ -149,27 +91,30 @@ z_scale <- function(column){
 }
 
 
-data_preprocess <- function(filename, threshold = 2.5){
-  
+data_preprocess <- function(filename, threshold = 2.5) {
   df <- read_delim(paste0("data/", filename), delim = ",")
    
 # parse filename; study, group, trial, type
   numbers <- as.data.frame(str_extract_numbers(filename))
-  Study <- numbers[1, ]
-  Group <- 100 * Study + numbers[2,]
-  Trial <- numbers[3, ]
+  Study <- numbers[1,]
+  Group <- 100 * Study + numbers[2, ]
+  Trial <- numbers[3,]
   Condition <- str_extract(filename, "[a-zA-Z]{9,14}")
-  vars <- as.data.frame(t(cbind(c(Study, Group, Trial, Condition))))
+  vars <- as.data.frame(t(cbind(c(
+    Study, Group, Trial, Condition
+  ))))
   names(vars) <- c("Study", "Group", "Trial", "Condition")
  
 # Downsampling
   df <- df %>%
-  group(n = 100, method = 'greedy') %>%
-    dplyr::summarise(time = ifelse(Study == 4, mean(min,na.rm=T), mean(time,na.rm=T)),
-                     HR1 = mean(HR1,na.rm=T),
-                     HR2 = mean(HR2,na.rm=T),
-                     Resp1 = mean(Resp1,na.rm=T),
-                     Resp2 = mean(Resp2,na.rm=T))
+    group(n = 100, method = 'greedy') %>%
+    dplyr::summarise(
+      time = ifelse(Study == 4, mean(min, na.rm = T), mean(time, na.rm = T)),
+      HR1 = mean(HR1, na.rm = T),
+      HR2 = mean(HR2, na.rm = T),
+      Resp1 = mean(Resp1, na.rm = T),
+      Resp2 = mean(Resp2, na.rm = T)
+    )
  
  # Remove outliers
   df <- df %>%
@@ -182,62 +127,50 @@ data_preprocess <- function(filename, threshold = 2.5){
       HR2_c_scaled = z_scale(HR2_c),
       Resp1_c_scaled = z_scale(Resp1_c),
       Resp2_c_scaled = z_scale(Resp2_c)
-  )
+    )
 
- df <- cbind(vars, df)
- return(df)
+  df <- cbind(vars, df)
+  return(df)
 }  
 
 ```
 
 
 ```{r}
-threshold=2.5 
-
 #  Identify all files to be read
-ECG_data <- list.files(path = "data/", pattern = ".csv")
- 
 # Run the function on the whole dataset using map_df
-df <- ECG_data %>% 
+df <- list.files(path = "data/", pattern = ".csv") %>%
   purrr::map_df(data_preprocess)
 
-df1 <- df
-df <- df1
-
-df <- df %>% 
+df <- df %>%
   mutate(
     Study = as.factor(Study),
     Group = as.factor(Group),
     Condition = as.factor(Condition),
     Trial = as.factor(Trial),
-    time = ifelse(df$time > 30000, df$time/10000, df$time)
-    )
+    time = ifelse(df$time > 30000, df$time / 10000, df$time)
+  ) %>%
+  subset(!is.na(time)) 
+
+df <- df %>% filter(
+  Study != 1,
+  Condition == 'Conversation' |
+    Condition == 'Synchronous' | 
+    Condition == 'TurnTaking'
+)
 
 # Generate a column for each: previous HR1, HR2, Resp1, Resp2. Tip: use the function Lag()
 # Generate a column for each: change in HR1, HR2, Resp1, Resp2
-df <-  df %>% 
-  group_by(Group, Condition, Trial) %>% 
-  mutate(next_HR1 = lead(HR1_c_scaled),
-         next_HR2 = lead(HR2_c_scaled),
-         next_Resp1 = lead(Resp1_c_scaled),
-         next_Resp2 = lead(Resp2_c_scaled),
-         change_HR1 = next_HR1 - HR1_c_scaled,
-         change_HR2 = next_HR2 - HR2_c_scaled,
-         change_Resp1 = next_Resp1 - Resp1_c_scaled,
-         change_Resp2 = next_Resp2 - Resp2_c_scaled
-         ) %>% 
-  subset(!is.na(time)) %>% 
-  ungroup()
 
 # Now we need to make sure all the data are meaningful or if something has to be removed
 # E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
 
 # plots plots plots
 
-df %>% 
-  group_by(Group) %>% 
-  ggplot(aes(time, HR1)) +
-  geom_smooth()
+# df %>%
+#   group_by(Group) %>%
+#   ggplot(aes(time, HR1)) +
+#   geom_smooth()
 
 # Remove bad data
 
@@ -247,28 +180,296 @@ df %>%
 
 
 ```{r}
-long <-
-  tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
-
-long <- long %>%
+make_long <- function(df) {
+  df <-  df %>%
+  group_by(Group, Condition, Trial) %>%
   mutate(
-    HR_other = tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']],
-    HR_self_lead = tidyr::pivot_longer(df, c(next_HR1, next_HR2))[['value']],
-    HR_other_lead = tidyr::pivot_longer(df, c(next_HR2, next_HR1))[['value']],
-    Resp_self = tidyr::pivot_longer(df, c(Resp1_c_scaled, Resp2_c_scaled))[['value']],
-    Resp_other = tidyr::pivot_longer(df, c(Resp2_c_scaled, Resp1_c_scaled))[['value']],
-    Resp_self_lead = tidyr::pivot_longer(df, c(next_Resp1, next_Resp2))[['value']],
-    Resp_other_lead = tidyr::pivot_longer(df, c(next_Resp2, next_Resp1))[['value']],
-    change_HR_self = tidyr::pivot_longer(df, c(change_HR1, change_HR2))[['value']],
-    change_HR_other = tidyr::pivot_longer(df, c(change_HR2, change_HR1))[['value']],
-    change_Resp_self = tidyr::pivot_longer(df, c(change_Resp1, change_Resp2))[['value']],
-    change_Resp_other = tidyr::pivot_longer(df, c(change_Resp2, change_Resp1))[['value']],
-    Participant = paste0(Group, str_extract_numbers(name))
-  )
+    next_HR1 = lead(HR1_c_scaled),
+    next_HR2 = lead(HR2_c_scaled),
+    next_Resp1 = lead(Resp1_c_scaled),
+    next_Resp2 = lead(Resp2_c_scaled),
+    change_HR1 = next_HR1 - HR1_c_scaled,
+    change_HR2 = next_HR2 - HR2_c_scaled,
+    change_Resp1 = next_Resp1 - Resp1_c_scaled,
+    change_Resp2 = next_Resp2 - Resp2_c_scaled
+  ) %>%
+  ungroup()
+  
+  
+  long2 <-
+    tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
+  
+  long2 <- long2 %>%
+    mutate(
+      HR_other = tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']],
+      HR_self_lead = tidyr::pivot_longer(df, c(next_HR1, next_HR2))[['value']],
+      HR_other_lead = tidyr::pivot_longer(df, c(next_HR2, next_HR1))[['value']],
+      Resp_self = tidyr::pivot_longer(df, c(Resp1_c_scaled, Resp2_c_scaled))[['value']],
+      Resp_other = tidyr::pivot_longer(df, c(Resp2_c_scaled, Resp1_c_scaled))[['value']],
+      Resp_self_lead = tidyr::pivot_longer(df, c(next_Resp1, next_Resp2))[['value']],
+      Resp_other_lead = tidyr::pivot_longer(df, c(next_Resp2, next_Resp1))[['value']],
+      change_HR_self = tidyr::pivot_longer(df, c(change_HR1, change_HR2))[['value']],
+      change_HR_other = tidyr::pivot_longer(df, c(change_HR2, change_HR1))[['value']],
+      change_Resp_self = tidyr::pivot_longer(df, c(change_Resp1, change_Resp2))[['value']],
+      change_Resp_other = tidyr::pivot_longer(df, c(change_Resp2, change_Resp1))[['value']],
+      Participant = paste0(Group, str_extract_numbers(name)),
+      HR_diff = HR_self - HR_other,
+      Resp_diff = Resp_self - Resp_other
+    )
+  
+  long <- long2 %>%
+    select(
+      -c(
+        'HR1',
+        'HR2',
+        'Resp1',
+        'Resp2',
+        'HR1_c',
+        'HR2_c',
+        'Resp1_c',
+        'Resp2_c',
+        'Resp1_c_scaled',
+        'Resp2_c_scaled',
+        'next_HR1',
+        'next_HR2',
+        'next_Resp1',
+        'next_Resp2',
+        'change_HR1',
+        'change_HR2',
+        'change_Resp1',
+        'change_Resp2',
+        '.groups',
+      )
+    )
+  
+  return(long)
+}
+
+# issue <- df %>% 
+#   group_by(Study) %>% 
+#   count(Condition)
+
+
+# issue2 <- long_filtered %>% 
+#   group_by(Study) %>% 
+#   count(Condition)
+
+#variable.names(long)
+
+#write.csv(long2, 'longV1.csv')
+
+long <- make_long(df)
 
 ```
 
+SP by group
 
+```{r}
+sp_df <- df %>% 
+  filter(Group != 408) 
+
+#min <- sp_df %>% group_by(Group, Condition) %>% tally()
+#min(min$n)
+
+sp_df <- sp_df %>% 
+  filter(as.numeric(.groups) <= 1747)
+
+#sp_df %>% group_by(.groups) %>% tally()
+#nlevels(sp_df$Group)
+
+sp_df <- sp_df %>% 
+  ungroup() %>% 
+  mutate(Group = as.numeric(as.factor(Group)))
+
+#nlevels(as.factor(sp_df$Group))
+
+obj_HR <- data.frame(x = 1:5241)
+obj_Resp <- data.frame(x = 1:5241)
+
+for(i in 1:22){
+  d <- sp_df %>% filter(Group == i)
+  obj_HR[,i] <- d$HR2_c_scaled
+  obj_Resp[,i] <- d$Resp2_c_scaled
+}
+
+list = 1:22
+repeat {
+  x <- as.numeric(sample(x = list, 22, replace = FALSE))
+  
+  if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+    break
+  } else
+    x <- 0
+}
+
+HR2_SP <- obj_HR
+Resp2_SP <- obj_Resp
+
+for(i in 1:22){
+  HR2_SP[, i] <- obj_HR[, x[i]]
+  Resp2_SP[, i] <- obj_Resp[, x[i]]
+}
+
+sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
+sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
+
+long_SP <- make_long(sp_df)
+
+```
+
+SP by condition if conditions don't matter
+
+```{r}
+sp_df <- df %>% 
+  filter(Group != 408) 
+
+#min <- sp_df %>% group_by(Group, Condition) %>% tally()
+#min(min$n)
+
+sp_df <- sp_df %>% 
+  filter(as.numeric(.groups) <= 1747)
+
+#sp_df %>% group_by(.groups) %>% tally()
+#nlevels(sp_df$Group)
+
+sp_df <- sp_df %>% 
+  ungroup() %>% 
+  mutate(n = as.numeric(as.factor(paste0(Group, Trial))))
+
+obj_HR <- data.frame(x = 1:1747)
+obj_Resp <- data.frame(x = 1:1747)
+
+for(i in 1:66){
+  d <- sp_df %>% filter(n == i)
+  obj_HR[,i] <- d$HR2_c_scaled
+  obj_Resp[,i] <- d$Resp2_c_scaled
+}
+
+list = 1:66
+repeat {
+  x <- as.numeric(sample(x = list, 66, replace = FALSE))
+  
+  if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+    break
+  } else
+    x <- 0
+}
+
+HR2_SP <- obj_HR
+Resp2_SP <- obj_Resp
+
+for(i in 1:66){
+  HR2_SP[, i] <- obj_HR[, x[i]]
+  Resp2_SP[, i] <- obj_Resp[, x[i]]
+}
+
+sp_df$HR2_c_scaled <- unlist(HR2_SP, use.names = F)
+sp_df$Resp2_c_scaled <- unlist(Resp2_SP, use.names = F)
+
+long_SP <- make_long(sp_df)
+
+```
+
+SP if condition matter
+
+```{r}
+#df %>% group_by(Group, Condition, Trial) %>% tally()
+#long %>% group_by(Group) %>% tally()
+#df %>% group_by(Group, Condition) %>% tally()
+
+# There are a different number of observations per trial. Group 408 had very few and were excluded
+sp_df <- df %>% 
+  filter(Group != 408) 
+
+#min <- sp_df %>% group_by(Group, Condition) %>% tally()
+#min(min$n)
+
+# The lowest amount of observations now is 1747
+sp_df <- sp_df %>% 
+  filter(as.numeric(.groups) <= 1747)
+
+#sp_df %>% group_by(.groups) %>% tally()
+#nlevels(sp_df$Group)
+
+# These are the different levels of the variable 'condition'. We save them, so we can loop through them
+conditions = c("Conversation", "Synchronous", "TurnTaking")
+
+# Place holders for HR and Resp (length = 3, because there are three conditions)
+HR_place <- vector(mode = "list", length = 3)
+Resp_place <- vector(mode = "list", length = 3)
+
+# looping through the three conditions
+for(j in 1:3) {
+  # Filtering for each condition and giving each group a number a number from 1 to 22
+  con_df <- sp_df %>% filter(Condition == conditions[j]) %>% 
+    mutate(n = as.numeric(as.factor(paste0(Group, Trial)))) 
+  
+  # Preparing place holders
+  obj_HR <- data.frame(x = 1:1747)
+  obj_Resp <- data.frame(x = 1:1747)
+  
+  # list with the different groups 
+  list <- as.numeric(levels(as.factor(con_df$n)))
+  
+  for (i in 1:22) {
+    d <- con_df %>% filter(n == list[i])
+    obj_HR[, i] <- d$HR2_c_scaled
+    obj_Resp[, i] <- d$Resp2_c_scaled
+  }
+  HR2_SP <- obj_HR
+  Resp2_SP <- obj_Resp
+  
+  repeat {
+    x <- as.numeric(sample(x = list, 22, replace = FALSE))
+    
+    if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+      break
+    } else
+      x <- 0
+  }
+  
+  for (i in 1:22) {
+    HR2_SP[, i] <- obj_HR[, x[i]]
+    Resp2_SP[, i] <- obj_Resp[, x[i]]
+  }
+  
+  HR_place[[j]] <- unlist(HR2_SP, use.names = F)
+  Resp_place[[j]] <- unlist(Resp2_SP, use.names = F)
+  
+}
+
+sp_df1 <- sp_df %>% 
+  filter(Condition == conditions[1]) %>% 
+  mutate(
+    HR2_c_scaled = HR_place[[1]],
+    Resp2_c_scaled = Resp_place[[1]]
+  )
+
+sp_df2 <- sp_df %>% 
+  filter(Condition == conditions[2]) %>% 
+  mutate(
+    HR2_c_scaled = HR_place[[2]],
+    Resp2_c_scaled = Resp_place[[2]]
+  )
+
+sp_df3 <- sp_df %>% 
+  filter(Condition == conditions[3]) %>% 
+  mutate(
+    HR2_c_scaled = HR_place[[3]],
+    Resp2_c_scaled = Resp_place[[3]]
+  )
+
+
+compare_df <- df %>% 
+  filter(Group != 408,
+         as.numeric(.groups) <= 1747
+         ) 
+
+long_SP <- rbind(sp_df1, sp_df2, sp_df3) %>% make_long_yes()
+
+sp_df <- rbind(sp_df1, sp_df2, sp_df3)
+
+```
 
 ## Now we need to run some analysis
 
@@ -292,21 +493,38 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 - we can then build on the previous models by also adding the previous change in the other
 
 ```{r}
-library(lmerTest)
-
-
-HR_model0 <-
+HR_m0 <-
   lmerTest::lmer(
     change_HR_self ~ 0 +
-      (HR_self + HR_other):Condition + 
-      (0 + Condition | Participant) + 
-      (0 + Condition | Group),
+      (HR_self + HR_diff):Condition +
+      (0 + Condition | Participant),
     subset(long, Study == "1"),
     REML = F,
     control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE)
   )
 
-summary(HR_model0)
+HR_m1 <- lmerTest::lmer(
+  change_HR_self ~
+    0 + HR_self:Condition + HR_diff:Condition +
+    (1 + Condition | Participant) +
+    (1 + Condition | Group),
+  subset(long, Study == "1"),
+  REML = F,
+  control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE)
+)
+
+Resp_m0 <-
+  lmerTest::lmer(
+    change_Resp_self ~ 0 +
+      (Resp_self + Resp_diff):Condition +
+      (0 + Condition | Participant),
+    subset(long, Study == "1"),
+    REML = F,
+    control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE)
+  )
+
+summary(Resp_m0)
+
 ```
 
 
@@ -335,6 +553,8 @@ Tip: sample() is your friend, but make sure to shuffle things within participant
  
 ```{r}
 # Create a shuffled dataset
+
+
 # Concatenate it to the original dataset (and remember to have a column telling you which is which)
 # Create the same models as in the previous chunk, but adding an interaction by shuffled vs. real
 ```
@@ -343,12 +563,6 @@ Tip: sample() is your friend, but make sure to shuffle things within participant
 ### TRICKY! Creating controls: surrogate pair controls
  - Per each real pair, identify at least one surrogate pair (matching one of the participants, with somebody doing the same task, but in a different pair)
 
-```{r}
-# Identify unique pairs within a given study (to keep things manageable) and create list of possible surrogate pairs (e.g. individual 1 from pair 1 and individual 2 from pair 2)
-# Starting from the wide format, create "surrogate" dataset with the data from surrogate pairs
-# Make it into long format
-# Create models as in chunks above, but adding an interaction with the Real vs. Surrogate variable (exclude shuffled ones for simplicity)
-```
  
 
 ### Effects of respiration coordination on heart rate coordination
