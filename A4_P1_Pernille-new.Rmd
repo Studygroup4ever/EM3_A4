@@ -107,29 +107,30 @@ If you remove 2 times sd from the mean, you pretty much capture 95% of the data.
 We want the higher threshold to be higher than mean + threshold*sd of the timeseries. 
 We want the lower threshold to be lower than mean + threshold*sd of the timeseries. 
 Then, we want the function to make the extreme values be replaced by the threshold values. 
+
 If anything is above the higher-threshold, we want it to be replaced by mean + threshold*sd of the timeseries. 
+
 If anything is below the lower-threshold, we want it to be replaced by mean-threshold*sd of the timeseries.
 
 ```{r}
-
-# Function for outliers
+# Function for removing outliers. We will replace the values with the mean value + or - the threshold*standard deviation of the timeseries
 removeOuts <- function(ts, threshold){
   higher_threshold_condition <- ts > (mean(ts, na.rm = T) + (threshold*sd(ts, na.rm = T)))
   lower_threshold_condition <- ts < (mean(ts, na.rm = T) - (threshold*sd(ts, na.rm = T)))
-  ts[higher_threshold_condition] <- mean(ts, na.rm= T) + (threshold*sd(ts, na.rm = T))  #anything above the higher threshold, we want to replace it
+  ts[higher_threshold_condition] <- mean(ts, na.rm= T) + (threshold*sd(ts, na.rm = T))  # we replace 
   ts[lower_threshold_condition] <- mean(ts, na.rm= T) - (threshold*sd(ts, na.rm = T))
   return(ts)
 }
 
-# defining z scale function
+# Threshold specification. 2.5 sd's from the mean
+threshold = 2.5 # Specified in the function itself too, kept here for overview for now)
+
+# Function for scaling
 z_scale <- function(column){
  column_c <- (column - mean(column, na.rm=T)) / sd(column, na.rm=T)
 }
 
-# Threshold specification. 2.5 sd's from the mean
-threshold = 2.5
-
-# data preprocessing
+# Function for preprocessing the data
 data_preprocess <- function(filename, threshold = 2.5) {
   df <- read_delim(paste0("data/", filename), delim = ",")
    
@@ -143,7 +144,7 @@ data_preprocess <- function(filename, threshold = 2.5) {
     Study, Group, Trial, Condition
   ))))
   names(vars) <- c("Study", "Group", "Trial", "Condition")
- 
+
 # Downsampling
   df <- df %>%
     group(n = 100, method = 'greedy') %>%
@@ -155,25 +156,66 @@ data_preprocess <- function(filename, threshold = 2.5) {
       Resp2 = mean(Resp2, na.rm = T)
     )
  
- # Remove outliers (comment out if you want to do without outliers)
+ # Remove outliers
   df <- df %>%
     mutate(
       HR1_c = removeOuts(HR1, threshold),
       HR2_c = removeOuts(HR2, threshold),
       Resp1_c = removeOuts(Resp1, threshold),
-       Resp2_c = removeOuts(Resp2, threshold),
-       HR1_c_scaled = z_scale(HR1_c),
-       HR2_c_scaled = z_scale(HR2_c),
-       Resp1_c_scaled = z_scale(Resp1_c),
-       Resp2_c_scaled = z_scale(Resp2_c)
-     )
-   
+      Resp2_c = removeOuts(Resp2, threshold),
+      HR1_c_scaled = z_scale(HR1_c),
+      HR2_c_scaled = z_scale(HR2_c),
+      Resp1_c_scaled = z_scale(Resp1_c),
+      Resp2_c_scaled = z_scale(Resp2_c)
+    )
+
   df <- cbind(vars, df)
   return(df)
 }
+```
 
-# Identify all files to be read
-# Run the function on the whole dataset using map_df
+# Will also make a function without using the removeOuts, so I can plot before/after outlier removal: 
+```{r}
+# Function for data preprocessing - same as above, but without removal of outliers 
+data_preprocess_w_outliers <- function(filename, threshold = 2.5) {
+  df <- read_delim(paste0("data/", filename), delim = ",")
+   
+  numbers <- as.data.frame(str_extract_numbers(filename))
+  Study <- numbers[1,]
+  Group <- 100 * Study + numbers[2, ]
+  Trial <- numbers[3,]
+  Condition <- str_extract(filename, "[a-zA-Z]{9,14}")
+  vars <- as.data.frame(t(cbind(c(
+    Study, Group, Trial, Condition
+  ))))
+  names(vars) <- c("Study", "Group", "Trial", "Condition")
+
+  df <- df %>%
+    group(n = 100, method = 'greedy') %>%
+    dplyr::summarise(
+      time = ifelse(Study == 4, mean(min, na.rm = T), mean(time, na.rm = T)),
+      HR1 = mean(HR1, na.rm = T),
+      HR2 = mean(HR2, na.rm = T),
+      Resp1 = mean(Resp1, na.rm = T),
+      Resp2 = mean(Resp2, na.rm = T)
+    )
+ # Scaling - remember that here, we have not removed outliers
+  df <- df %>%
+    mutate(
+      HR1_scaled = z_scale(HR1),
+      HR2_scaled = z_scale(HR2),
+      Resp1_scaled = z_scale(Resp1),
+      Resp2_scaled = z_scale(Resp2)
+    )
+  df <- cbind(vars, df)
+  return(df)
+}
+```
+
+# Clean - Identifying all files to be read
+```{r}
+# CLEAN: 
+# Running the function on the whole dataset using map_df, and correcting the classes and removing NA's. Also removing study 1, because it does not contain the same conditions. We here select only the conditions that are in all studies.
 df <- list.files(path = "data/", pattern = ".csv") %>%
   purrr::map_df(data_preprocess)
 
@@ -185,22 +227,46 @@ df <- df %>%
     Trial = as.factor(Trial),
     time = ifelse(df$time > 30000, df$time / 10000, df$time)
   ) %>%
-  subset(!is.na(time)) 
+  subset(!is.na(time)) %>%
+  filter(
+    Study != 1,
+    Condition == 'Conversation' |
+      Condition == 'Synchronous' |
+      Condition == 'TurnTaking'
+  )
 
-df <- df %>% filter(
+```
+
+# With outliers (just run this chunk to get the other plot)
+```{r}
+# W_OUTLIERS:
+# Running the function on the whole dataset using map_df - with outliers - and ,orrecting the classes and removing NA's
+df_w_outliers <- list.files(path = "data/", pattern = ".csv") %>%
+  purrr::map_df(data_preprocess_w_outliers)
+
+df <- df %>%
+  mutate(
+    Study = as.factor(Study),
+    Group = as.factor(Group),
+    Condition = as.factor(Condition),
+    Trial = as.factor(Trial),
+    time = ifelse(df$time > 30000, df$time / 10000, df$time)
+  ) %>%
+  subset(!is.na(time)) %>% filter(
   Study != 1,
   Condition == 'Conversation' |
     Condition == 'Synchronous' | 
     Condition == 'TurnTaking'
 )
+```
 
+# Plotting before/after outlier removal
+```{r}
+# Making two plots and then plotting them together (scaled values)
+p <- ggplot(data = df_w_outliers) + geom_path(aes(time,HR1_scaled, color = "HR1")) + geom_path(aes(time,HR2_scaled,color = "HR2")) + labs(x = "time", y = "HR") + theme_classic()
 
-# Plot after removing outliers
-p_c <- ggplot(data = df) + geom_path(aes(time,HR1_c, color = "HR1")) + geom_path(aes(time,HR2_c,color = "HR2")) + labs(x = "time", y = "HR") + theme_classic()
+p_c <- ggplot(data = df) + geom_path(aes(time,HR1_c_scaled, color = "HR1")) + geom_path(aes(time,HR2_c_scaled,color = "HR2")) + labs(x = "time", y = "HR") + theme_classic()
 
-p_c
-
-# Both plots
 plot_grid(p,p_c, labels = c('With outliers', 'No outliers'))
 ```
 
@@ -208,12 +274,11 @@ Outlier correction is never neutral. We can replace it with the mean, replacemen
 
 # Make long function + apply it to df
 ```{r}
-
+# Function for making the df long - we are going to do this twice
 make_long <- function(df) {
-  
-  # Mutating lead-columns
+  # Creating the columns we want
   df <-  df %>%
-  group_by(Group, Condition, Trial) %>% 
+  group_by(Group, Condition, Trial) %>%
   mutate(
     next_HR1 = lead(HR1_c_scaled),
     next_HR2 = lead(HR2_c_scaled),
@@ -226,11 +291,11 @@ make_long <- function(df) {
   ) %>%
   ungroup()
   
-  # Using pivot_longer now
+  # Making the long format 
   long2 <-
     tidyr::pivot_longer(df, c(HR1_c_scaled, HR2_c_scaled), values_to = 'HR_self')
   
-  # Mutating new columns
+  # Making other columns in the long df that we want for the models
   long2 <- long2 %>%
     mutate(
       HR_other = tidyr::pivot_longer(df, c(HR2_c_scaled, HR1_c_scaled))[['value']],
@@ -249,6 +314,7 @@ make_long <- function(df) {
       Resp_diff = Resp_self - Resp_other
     )
   
+  # Remocing columns we don't want
   long <- long2 %>%
     select(
       -c(
@@ -277,10 +343,144 @@ make_long <- function(df) {
   return(long)
 }
 
-# Make df long
 long <- make_long(df)
 
 ```
+
+# Shuffled pairs:  INSERT CODE
+When creating shuffled controls, we break the temporal dependencies.
+
+## Surrogate pairs:
+When creating surrogate pairs, we isolate the effects of the task itself. 
+We decided that the study year should not matter, if the conditions carried out were the same. We therefore made our surrogate pairs within conditions across all studies as they should essentially be the same study.
+
+# Some preprocessing before making surrogate pairs
+```{r}
+# First, we want to check whether all the conditions have around the same amount of data points, so we find the lowest amount: 
+min <- df %>% group_by(Group,Condition) %>% tally()
+
+min[which(min$n == min(min$n)),]
+
+# Lowest amount of data is group 408 with 991 (this group has double that amount in the 3rd condition, so it varies a lot too). We will remove that one.
+sp_df <- df %>% 
+  filter(Group != 408)
+
+# Second, we now check which pair has lowest amount of data points: 
+min <- sp_df %>% group_by(Group, Condition) %>% tally()
+min[which(min$n == min(min$n)),]
+
+# That is group 401 with 1747 data points. We will constrain the whole dataset from this point, so that we have the same length: 
+sp_df <- sp_df %>% 
+  filter(as.numeric(.groups) <= 1747)
+
+# Third, we now check how many pairs there are:
+NROW(unique(sp_df$Group))
+
+# We have 22 groups (pairs)
+```
+
+# On to the surrogate pairs:
+```{r}
+##        Making a for loop for the unique 22 pairs:      ## 
+
+# These are the different levels of the variable 'condition'. We save them, so we can loop through them
+conditions = c("Conversation", "Synchronous", "TurnTaking")
+
+# Place holders for HR and Resp (length = 3, because there are three conditions)
+HR_place <- vector(mode = "list", length = 3)
+Resp_place <- vector(mode = "list", length = 3)
+
+# Looping through the three conditions
+for(j in 1:3) {
+  
+  # Filtering for each condition and giving each group a number a number from 1 to 22
+  con_df <- sp_df %>% filter(Condition == conditions[j]) %>% 
+    mutate(n = as.numeric(as.factor(paste0(Group, Trial))))
+  
+  # Preparing place holders
+  obj_HR <- data.frame(x = 1:1747)
+  obj_Resp <- data.frame(x = 1:1747)
+  
+  # List with the different groups 
+  list <- as.numeric(levels(as.factor(con_df$n)))
+  
+  # Looping through the participants per condition and adding their HR and Resp to a place holder object
+  for (i in 1:22) {
+    d <- con_df %>% filter(n == list[i])
+    obj_HR[, i] <- d$HR2_c_scaled
+    obj_Resp[, i] <- d$Resp2_c_scaled
+  }
+  
+  # Making a new place holder with the same size by duplicating the old place holder
+  HR2_SP <- obj_HR
+  Resp2_SP <- obj_Resp
+  
+  # Making a random list of new surrogate pairs with no overlaps
+  repeat {
+    x <- as.numeric(sample(x = list, 22, replace = FALSE))
+    
+    if (nlevels(as.factor(x == list)) == 1 & x[1] != list[1]) {
+      break
+    } else
+      x <- 0
+  }
+  
+  # Scrambling the order of HR and Resp according to the surrogate pair
+  for (i in 1:22) {
+    HR2_SP[, i] <- obj_HR[, x[i]]
+    Resp2_SP[, i] <- obj_Resp[, x[i]]
+  }
+  
+  # Unlisting the HR and Resp in the new scrambled order
+  HR_place[[j]] <- unlist(HR2_SP, use.names = F)
+  Resp_place[[j]] <- unlist(Resp2_SP, use.names = F)
+  
+}
+
+# Filtering by condition and adding HR and Resp in the new scrambled order
+sp_df1 <- sp_df %>% 
+  filter(Condition == conditions[1]) %>% 
+  mutate(
+    HR2_c_scaled = HR_place[[1]],
+    Resp2_c_scaled = Resp_place[[1]]
+  )
+
+# Filtering by condition and adding HR and Resp in the new scrambled order
+sp_df2 <- sp_df %>% 
+  filter(Condition == conditions[2]) %>% 
+  mutate(
+    HR2_c_scaled = HR_place[[2]],
+    Resp2_c_scaled = Resp_place[[2]]
+  )
+
+# Filtering by condition and adding HR and Resp in the new scrambled order
+sp_df3 <- sp_df %>% 
+  filter(Condition == conditions[3]) %>% 
+  mutate(
+    HR2_c_scaled = HR_place[[3]],
+    Resp2_c_scaled = Resp_place[[3]]
+  )
+
+# Collecting the data and making it long
+long_SP <- rbind(sp_df1, sp_df2, sp_df3) %>% make_long()
+
+# (df for checking if we did it right)
+compare_df <- df %>% 
+  filter(Group != 408,
+         as.numeric(.groups) <= 1747
+         ) 
+
+sp_df <- rbind(sp_df1, sp_df2, sp_df3)
+```
+
+
+# MANGLER SHUFFLE CODE + MODEL KODE
+
+
+
+
+
+
 
 # Surrogate pairs by BUURA
 Why surrogate pairs? 
@@ -308,6 +508,38 @@ SurrogateList
 # Loop
 ```{r}
 for (i in 1:nrow(SurrogateList)) {
+  x <- subset(df, Group == SurrogateList$a[i])
+  y <- subset(df, Group == SurrogateList$b[i])
+  group <- 800 + i
+  for (condition in c("Synchronous",
+                      "TurnTaking",
+                      "Self-paced",
+                      "Conversation",
+                      "MovementCoop") {
+    if (condition %in% unique(x$condition) &
+        condition %in% unique(y$condition)) {
+      z1 <- subset(x, condition == condition)
+      z2 <- subset(y, condition == condition)
+    }
+    if (nrow(z1) >nrow(z2)) {
+      z1 <- z1[-((nrow(z2) + 1):nrow(z1)),]
+    }
+    if (nrow(z2) >nrow(z1)) {
+      z2 <- z2[-((nrow(z1) + 1):nrow(z2)),]
+    }
+    w1 <- z1 %>% mutate(
+      HR2 = z2$HR2,
+      Resp2 = z2$Resp2,
+      HR2_lead = z2$HR2_lead,
+      Resp2_lead = z2$Resp2_lead,
+      HR2_change = z2$HR2_change,
+      Resp2_change = z2$Resp2_change
+    )
+                      }
+
+
+
+for (i in 1:nrow(SurrogateList)) {
   x <-
     subset(df, Group == SurrogateList$a[i]) #Create a subset where group = the ith element of the surrogate list a column
   y <- subset(df, Group == SurrogateList$b[i]) #Same with column b
@@ -324,10 +556,10 @@ for (i in 1:nrow(SurrogateList)) {
       z2 <- subset(y, condition == condition)
     }
     if (nrow(z1 > nrow(z2)) {
-      z1 <- z1[-((nrow(z2) + 1):nrow(z1)), ]
+      z1 <- z1[-((nrow(z2) + 1):nrow(z1)),]
     }
     if (nrow(z2 > nrow(z1)) {
-      z2 <- z2[-((nrow(z1) + 1):nrow(z2)), ]
+      z2 <- z2[-((nrow(z1) + 1):nrow(z2)),]
     }
     w1 <- z1 %>% mutate(
       HR2 = z2$HR2,
@@ -343,8 +575,9 @@ for (i in 1:nrow(SurrogateList)) {
     w <- w1
     if (exists("d_surrogate")) {
       d_surrogate <- rbind(d_surrogate, w)
-      else
-        (d_surrogate <- w)
+    }
+    else{
+      (d_surrogate <- w)
     }
   }
 }
