@@ -202,7 +202,7 @@ df <- df %>%
 ## With outliers (just run this chunk to get the other plot)
 ```{r}
 # W_OUTLIERS:
-# Running the function on the whole dataset using map_df - with outliers - and ,orrecting the classes and removing NA's
+# Running the function on the whole dataset using map_df - with outliers - and correcting the classes and removing NA's
 df_w_outliers <- list.files(path = "data/", pattern = ".csv") %>%
   purrr::map_df(data_preprocess_w_outliers)
 
