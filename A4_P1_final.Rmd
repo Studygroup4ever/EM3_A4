@@ -477,9 +477,9 @@ summary(m_resp)
 ## Let's do some modeling 2 - shuffled
 Second, we will model on the shuffled pairs. 
 ```{r}
-m_HR_sh <- lmerTest::lmer(change_HR_self ~ 0 + (HR_self + HR_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type == "Shuffled"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+m_HR_sh <- lmerTest::lmer(change_HR_self ~ 0 + (HR_self + HR_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type != "Surrogate"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
 
-m_resp_sh <- lmerTest::lmer(change_Resp_self ~ 0 + (Resp_self + Resp_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type == "Shuffled"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+m_resp_sh <- lmerTest::lmer(change_Resp_self ~ 0 + (Resp_self + Resp_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type != "Surrogate"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
 
 summary(m_HR_sh)
 summary(m_resp_sh)
