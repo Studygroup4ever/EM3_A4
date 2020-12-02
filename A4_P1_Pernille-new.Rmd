@@ -82,7 +82,7 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 # NEW CHUNK CLEAN
 ```{r}
 # Load the libraries
-pacman::p_load(dplyr,tidyverse,readr,ggplot2,groupdata2,cowplot, stringr,purrr,tidyr,reshape2,crqa,strex,stringr,stats)
+pacman::p_load(dplyr,tidyverse,readr,ggplot2,groupdata2,cowplot, stringr,purrr,tidyr,reshape2,crqa,strex,stringr,stats,lme4)
 
 # Load a file
 #d <-  read.csv("Study1_G1_T1_Synchronous.csv")
@@ -272,7 +272,7 @@ plot_grid(p,p_c, labels = c('With outliers', 'No outliers'))
 
 Outlier correction is never neutral. We can replace it with the mean, replacement value. Here, we replaced it with the threshold value to not create too much of a bias in the dataset by replacing one or the other - but there are many imperfect ways of doing it.
 
-# Make long function + apply it to df
+# Make-long function + apply it to df
 ```{r}
 # Function for making the df long - we are going to do this twice
 make_long <- function(df) {
@@ -311,10 +311,10 @@ make_long <- function(df) {
       change_Resp_other = tidyr::pivot_longer(df, c(change_Resp2, change_Resp1))[['value']],
       Participant = paste0(Group, str_extract_numbers(name)),
       HR_diff = HR_self - HR_other,
-      Resp_diff = Resp_self - Resp_other
+      Resp_diff = Resp_self - Resp_other,
     )
   
-  # Remocing columns we don't want
+  # Removing columns we don't want
   long <- long2 %>%
     select(
       -c(
@@ -345,14 +345,33 @@ make_long <- function(df) {
 
 long <- make_long(df)
 
+# Adding Type column
+long <- long %>% 
+  mutate(Type = "Original")
+
 ```
 
-# Shuffled pairs:  INSERT CODE
-When creating shuffled controls, we break the temporal dependencies.
+# Shuffled pairs:
+When creating shuffled controls, we break the temporal dependencies. This ensures the "coordination" observed is due to the actual values in the series and not their sequence.
+
+```{r}
+df_shuffled <- long %>% group_by(Participant, Condition) %>%
+  mutate(
+    HR_self = sample(HR_self), # randomly samples values from the column
+    HR_other = sample(HR_other),
+   Resp_self = sample(HR_self_lead),
+    Resp_other = sample(HR_other_lead),
+    change_HR_self = sample(change_HR_self),
+   change_Resp_self = sample(change_Resp_self), Type = "Shuffled")
+
+dfmerge <- rbind(long, df_shuffled)
+
+#write.csv(dfmerge, "mergedframe.csv")
+```
 
 ## Surrogate pairs:
 When creating surrogate pairs, we isolate the effects of the task itself. 
-We decided that the study year should not matter, if the conditions carried out were the same. We therefore made our surrogate pairs within conditions across all studies as they should essentially be the same study.
+We decided that the study year should not matter, if the conditions carried out were the same. We therefore made our surrogate pairs within conditions across all studies as they should essentially be the "same" study.
 
 # Some preprocessing before making surrogate pairs
 ```{r}
@@ -464,17 +483,76 @@ sp_df3 <- sp_df %>%
 # Collecting the data and making it long
 long_SP <- rbind(sp_df1, sp_df2, sp_df3) %>% make_long()
 
-# (df for checking if we did it right)
-compare_df <- df %>% 
-  filter(Group != 408,
-         as.numeric(.groups) <= 1747
-         ) 
+# Adding Type
+long_SP <- long_SP %>% mutate(
+  Type = "Surrogate"
+)
 
-sp_df <- rbind(sp_df1, sp_df2, sp_df3)
+# Merging all three together 
+dfmerge <- rbind(dfmerge,long_SP)
+
+# Type
+dfmerge$Type <- as.factor(dfmerge$Type)
+
+```
+
+# Let's do some modelling 1
+First, we will model on the original pairs.
+```{r}
+m_HR <- lmerTest::lmer(change_HR_self ~ 0 + (HR_self + HR_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type == "Original"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+m_resp <- lmerTest::lmer(change_Resp_self ~ 0 + (Resp_self + Resp_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type == "Original"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE)) 
+
+summary(m_HR)
+summary(m_resp)
+```
+
+# Let's do some modelling 2
+Second, we will model on the shuffled pairs. 
+```{r}
+m_HR_sh <- lmerTest::lmer(change_HR_self ~ 0 + (HR_self + HR_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type == "Shuffled"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+m_resp_sh <- lmerTest::lmer(change_Resp_self ~ 0 + (Resp_self + Resp_diff):Condition + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type == "Shuffled"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+summary(m_HR_sh)
+summary(m_resp_sh)
+```
+
+# Let's do some modelling 3
+Third, we will model on the surrogate pairs. 
+```{r}
+m_HR_su <- lmerTest::lmer(change_HR_self ~ 0 + ((HR_self + HR_diff):Condition):Type + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type != "Shuffled"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+m_resp_su <- lmerTest::lmer(change_Resp_self ~ 0 + ((Resp_self + Resp_diff):Condition):Type + (0 + Condition|Participant) + (0 + Condition|Group), data = dfmerge %>% filter(Type != "Shuffled"), control = lmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+summary(m_HR_su)
+summary(m_resp_su)
 ```
 
 
-# MANGLER SHUFFLE CODE + MODEL KODE
+
+
+
+
+
+
+
+
+
+
+
+PUT MODEL CODE HER, og er der andet der mangler?
+
+
+
+
+
+
+
+
+
+
+
 
 
 
