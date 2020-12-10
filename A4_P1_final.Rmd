@@ -59,6 +59,8 @@ The data files can be found here: https://www.dropbox.com/sh/bvvk7t3fvsplh9o/AAD
 - downsample the data
 - Add a column for study, group, trial and condition
 
+# This part of the code was written by PB
+
 # Setup
 ```{r}
 # Load the libraries
@@ -137,6 +139,8 @@ data_preprocess <- function(filename, threshold = 2.5) {
 }
 ```
 
+# This part of the code was written by SOH
+
 ## Will also make a function without using the removeOuts, so we can plot before/after outlier removal: 
 ```{r}
 # Function for data pre-processing - same as above, but without removal of outliers 
@@ -198,6 +202,8 @@ df <- df %>%
   )
 
 ```
+
+# This part of the code was written by JJ
 
 ## With outliers (just run this chunk to get the other plot)
 ```{r}
@@ -315,6 +321,8 @@ long <- long %>%
   mutate(Type = "Original")
 
 ```
+
+# This part of the code was written by KK
 
 # Shuffled pairs:
 If 2 people are in a room together doing a task they might towards the end be  more likely to coordinate no matter the task. To get around the time-related variation, we will  break the temporal dependencies by creating and modelling on shuffled controls. This ensures the "coordination" observed is due to the actual values in the series and not their sequence.
@@ -461,6 +469,8 @@ dfmerge <- rbind(dfmerge,long_SP)
 dfmerge$Type <- as.factor(dfmerge$Type)
 
 ```
+
+# This part of the code was written by CB
 
 # Modeling
 ## Let's do some modeling 1 - original
